@@ -1,18 +1,15 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -pthread
 INCLUDES = -Iinclude
-TARGET = bin/lith
+TARGET_DIR = bin
+TARGET = $(TARGET_DIR)/lith
 
-# Détection de l'OS
+# Détection de l'OS pour les bibliothèques
 ifeq ($(OS),Windows_NT)
-    # Options spécifiques à Windows (MinGW)
     LIBS = -lws2_32
     TARGET := $(TARGET).exe
-    MKDIR = if not exist bin mkdir bin
 else
-    # Options pour Linux/macOS/WSL
     LIBS = 
-    MKDIR = mkdir -p bin
 endif
 
 SRC = $(wildcard src/*.c)
@@ -21,11 +18,12 @@ OBJ = $(SRC:.c=.o)
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-	@$(MKDIR)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJ) $(LIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
+# On retire la commande de création de dossier automatique qui pose problème
+# Créez simplement le dossier 'bin' à la main une seule fois
 clean:
 	rm -f src/*.o $(TARGET)
