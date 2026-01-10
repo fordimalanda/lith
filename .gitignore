@@ -1,0 +1,16 @@
+# Dossier de build et binaire final
+bin/
+*.o
+*.out
+
+# Logs
+*.log
+
+# Fichiers temporaires éditeurs
+.vscode/
+.idea/
+*.swp
+*~
+
+# Fichiers système
+.DS_Store
