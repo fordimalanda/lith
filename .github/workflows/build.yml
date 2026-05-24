@@ -7,6 +7,9 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build on ${{ matrix.local_name }}
@@ -42,12 +45,14 @@ jobs:
     - name: Compile LITH (Linux & Mac)
       if: matrix.os != 'windows-latest'
       run: |
+        mkdir -p bin
         make
 
     - name: Compile LITH (Windows)
       if: matrix.os == 'windows-latest'
       shell: msys2 {0}
       run: |
+        mkdir -p bin
         make
 
     - name: Prepare Workspace Folder Structure
