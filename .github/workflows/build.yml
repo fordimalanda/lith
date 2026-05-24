@@ -9,19 +9,22 @@ on:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build on ${{ matrix.local_name }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
+            local_name: Linux
             artifact_name: lith-linux.tar.gz
             asset_path: lith-linux.tar.gz
           - os: windows-latest
+            local_name: Windows
             artifact_name: lith-windows.zip
             asset_path: lith-windows.zip
           - os: macos-latest
+            local_name: Mac
             artifact_name: lith-mac.tar.gz
             asset_path: lith-mac.tar.gz
 
@@ -36,7 +39,7 @@ jobs:
         msystem: MINGW64
         install: mingw-w64-x86_64-gcc gcc make
 
-    - name: Compile LITH (Linux & macOS)
+    - name: Compile LITH (Linux & Mac)
       if: matrix.os != 'windows-latest'
       run: |
         make
@@ -48,9 +51,15 @@ jobs:
         make
 
     - name: Prepare Workspace Folder Structure
+      shell: bash
       run: |
         mkdir -p dist/public
-        cp -r public/* dist/public/
+        if [ -d "public" ] && [ "$(ls -A public 2>/dev/null)" ]; then
+          cp -r public/* dist/public/
+        else
+          touch dist/public/.gitkeep
+        fi
+        
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           cp bin/lith.exe dist/lith.exe
         else
@@ -66,20 +75,22 @@ jobs:
 
     - name: Package Linux Artifact (.tar.gz)
       if: matrix.os == 'ubuntu-latest'
+      shell: bash
       run: |
         cd dist
         tar -czf ../lith-linux.tar.gz lith public/
 
-    - name: Package macOS Artifact (.tar.gz)
+    - name: Package Mac Artifact (.tar.gz)
       if: matrix.os == 'macos-latest'
+      shell: bash
       run: |
         cd dist
         tar -czf ../lith-mac.tar.gz lith public/
 
     - name: Upload Intermediate Platform Artifacts
-      uses: actions/artifacts@v4
+      uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.artifact_name }}
+        name: ${{ matrix.local_name }}-package
         path: ${{ matrix.asset_path }}
         retention-days: 1
 
@@ -92,29 +103,29 @@ jobs:
       run: mkdir -p bundle_payload
 
     - name: Download Linux Binary Package
-      uses: actions/artifacts@v4
+      uses: actions/download-artifact@v4
       with:
-        name: lith-linux.tar.gz
+        name: Linux-package
         path: bundle_payload
 
     - name: Download Windows Binary Package
-      uses: actions/artifacts@v4
+      uses: actions/download-artifact@v4
       with:
-        name: lith-windows.zip
+        name: Windows-package
         path: bundle_payload
 
-    - name: Download macOS Binary Package
-      uses: actions/artifacts@v4
+    - name: Download Mac Binary Package
+      uses: actions/download-artifact@v4
       with:
-        name: lith-mac.tar.gz
+        name: Mac-package
         path: bundle_payload
 
     - name: Zip All Distribution Packages
       run: |
-        zip -r lith-distribution.zip bundle_payload
+        zip -j lith-distribution.zip bundle_payload/*
 
     - name: Upload Final Consolidated Artifact
-      uses: actions/artifacts@v4
+      uses: actions/upload-artifact@v4
       with:
         name: lith-release-packages
         path: lith-distribution.zip
