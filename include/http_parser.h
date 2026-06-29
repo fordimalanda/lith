@@ -20,4 +20,7 @@ typedef struct {
 int parse_http_request(const char *raw_request, HttpRequest *out_request);
 const char* method_to_str(HttpMethod method);
 
+// Déclaration pour la gestion dynamique des types MIME
+const char* get_mime_type(const char *path);
+
 #endif
