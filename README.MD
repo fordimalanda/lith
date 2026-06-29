@@ -28,7 +28,7 @@ To build LITH from source, you need:
     bin\lith
     ```
 
-3. **Specify a Custom Port (Optional)**: By default, the server initializes on port 8080. You can override this behavior by passing a custom port number as a command-line argument:
+3. **Specify a Custom Port (Optional)**: By default, the server initializes on port 8090. You can override this behavior by passing a custom port number as a command-line argument:
     ```bash
     bin\lith 8005
     ```
@@ -50,7 +50,7 @@ The codebase follows a modular design pattern to keep concerns separated:
 
 Default server configurations are managed statically via macros located within `include/server.h` and `include/common.h`:
 
-* `DEFAULT_PORT`: 8080
+* `DEFAULT_PORT`: 8090
 
 * `BUFFER_SIZE`: 4096 bytes
 

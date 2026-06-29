@@ -23,7 +23,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#define DEFAULT_PORT 8080
+#define DEFAULT_PORT 8090
 #define BACKLOG 10
 #define BUFFER_SIZE 4096
 

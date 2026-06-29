@@ -1,3 +1,8 @@
+/* * Copyright (c) 2026 Fordi / FomaDev. 
+ * Licensed under FomaDev Public License.
+ * See LICENSE file in the project root for full license information.
+ */
+
 #include "server.h"
 #include "common.h"
 #include "logger.h"
@@ -110,15 +115,26 @@ int lith_init_server(int port) {
     }
 
     int opt = 1;
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+#ifdef _WIN32
+    // Sous Windows, SO_EXCLUSIVEADDRUSE empêche le vol de port ou la superposition permissive d'instances
+    if (setsockopt(server_fd, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&opt, sizeof(opt)) < 0) {
+        lith_log(LOG_WARN, "Failed to set SO_EXCLUSIVEADDRUSE");
+    }
+#else
+    // Sous Linux / macOS, SO_REUSEADDR permet de réutiliser rapidement le port après un crash sans être permissif
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt)) < 0) {
+        lith_log(LOG_WARN, "Failed to set SO_REUSEADDR");
+    }
+#endif
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(port);
 
+    // Si le port est déjà occupé, le bind() échouera immédiatement au lieu de se lancer en tâche aveugle
     if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        lith_log(LOG_ERROR, "Bind failed on port %d", port);
+        lith_log(LOG_ERROR, "Bind failed on port %d. Port might already be in use.", port);
         lith_close_socket(server_fd);
         return -1;
     }
@@ -156,8 +172,4 @@ void lith_start_server(int server_fd) {
             free(ctx);
         }
     }
-    
-#ifdef _WIN32
-    WSACleanup();
-#endif
 }
