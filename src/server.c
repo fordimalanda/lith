@@ -81,8 +81,16 @@ void *lith_client_handler(void *arg) {
             char *file_content = read_file(file_path, &file_size);
 
             if (file_content) {
-                char header[256];
-                sprintf(header, "HTTP/1.1 200 OK\r\nContent-Length: %ld\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", file_size);
+                char header[384]; // Augmenté pour éviter tout risque de dépassement de capacité de chaîne
+                const char *mime_type = get_mime_type(file_path);
+
+                sprintf(header, 
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Length: %ld\r\n"
+                        "Content-Type: %s\r\n"
+                        "Connection: close\r\n\r\n", 
+                        file_size, mime_type);
+
                 send(ctx->client_socket, header, (int)strlen(header), 0);
                 send(ctx->client_socket, file_content, (int)file_size, 0);
                 free(file_content);
