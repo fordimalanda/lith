@@ -91,7 +91,8 @@ const char* get_mime_type(const char *path) {
  * Returns a pointer to a static buffer containing the HTML
  */
 const char* get_error_html(int status_code, const char *title, const char *message) {
-    static char error_buffer[1024];
+    // Augmentation de la taille à 2048 pour accueillir tout le HTML + CSS + Messages sans troncature
+    static char error_buffer[2048];
     
     snprintf(error_buffer, sizeof(error_buffer),
         "<!DOCTYPE html>\n"
