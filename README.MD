@@ -6,6 +6,7 @@ LITH is a minimalist, high-performance, multi-threaded HTTP server implemented i
 
 - **Multi-threaded Architecture**: Utilizes pthreads to handle multiple simultaneous client connections efficiently without blocking the core socket listener.
 - **Dynamic MIME Type Resolution**: Automatically detects file extensions to serve proper `Content-Type` headers, enabling native web browser rendering for modern multi-resource web applications.
+- **Unified Error Handling Layouts**: Replaces raw text exceptions with centralized, professional dark-themed HTML canvas pages for standard HTTP errors (`400 Bad Request`, `403 Forbidden`, `404 Not Found`, and `500 Internal Server Error`).
 - **Cross-Platform Socket Layer**: Full compilation compatibility across Windows and POSIX-compliant environments using granular compile-time hardware abstractions.
 - **Strict Port Collision Guard**: Advanced validation layer preventing concurrent process overlaps on identical network ports, terminating gracefully with precise diagnostic logs.
 - **Directory Traversal Protection**: Integrated path canonicalization security filters that immediately intercept and block malicious relative path execution (`..`).
@@ -52,12 +53,12 @@ Default backend configurations are statically optimized via macro bindings locat
 * `DEFAULT_PORT`: 8090
 * `BUFFER_SIZE`: 4096 bytes
 * `BACKLOG`: 10 maximum pending connection queues
-* `LITH_VERSION`: 1.0.2
+* `LITH_VERSION`: 1.0.3
 
 ## Supported Asset Formats
 
 LITH natively decodes and streams the following web layouts:
-- **Documents**: `.html`, `.htm`, `.txt`
+- **Documents & Layouts**: `.html`, `.htm`, `.txt`
 - **Styles & Scripts**: `.css`, `.js`
 - **Data Schemas**: `.json`
 - **Graphics**: `.png`, `.jpg`, `.jpeg`, `.gif`, `.ico`
