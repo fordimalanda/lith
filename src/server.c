@@ -56,50 +56,77 @@ void *lith_client_handler(void *arg) {
     
     if (valread > 0) {
         HttpRequest req;
-        if (parse_http_request(buffer, &req) == 0) {
-            lith_log(LOG_INFO, "Request: %s %s", method_to_str(req.method), req.path);
-
-            // SECURITY CHECK: Anti-Directory Traversal
-            if (!is_safe_path(req.path)) {
-                lith_log(LOG_WARN, "Security Alert: Blocked traversal attempt on path: %s", req.path);
-                char *res403 = "HTTP/1.1 403 Forbidden\r\nContent-Length: 22\r\nConnection: close\r\n\r\n<h1>403 Forbidden</h1>";
-                send(ctx->client_socket, res403, (int)strlen(res403), 0);
-                
-                lith_close_socket(ctx->client_socket);
-                free(ctx);
-                return NULL;
-            }
-
-            char file_path[512] = "public";
-            if (strcmp(req.path, "/") == 0) {
-                strcat(file_path, "/index.html");
-            } else {
-                strcat(file_path, req.path);
-            }
-
-            long file_size = 0;
-            char *file_content = read_file(file_path, &file_size);
-
-            if (file_content) {
-                char header[384]; // Augmenté pour éviter tout risque de dépassement de capacité de chaîne
-                const char *mime_type = get_mime_type(file_path);
-
-                sprintf(header, 
-                        "HTTP/1.1 200 OK\r\n"
-                        "Content-Length: %ld\r\n"
-                        "Content-Type: %s\r\n"
-                        "Connection: close\r\n\r\n", 
-                        file_size, mime_type);
-
-                send(ctx->client_socket, header, (int)strlen(header), 0);
-                send(ctx->client_socket, file_content, (int)file_size, 0);
-                free(file_content);
-            } else {
-                lith_log(LOG_WARN, "404 - Not Found: %s", file_path);
-                char *res404 = "HTTP/1.1 404 Not Found\r\nContent-Length: 20\r\nConnection: close\r\n\r\n<h1>404 Not Found</h1>";
-                send(ctx->client_socket, res404, (int)strlen(res404), 0);
-            }
+        if (parse_http_request(buffer, &req) != 0) {
+            // ERROR 400: Bad Request
+            lith_log(LOG_WARN, "400 - Bad Request parsing failed");
+            const char *html = get_error_html(400, "Bad Request", "The server could not understand the request due to malformed syntax.");
+            char header[256];
+            sprintf(header, "HTTP/1.1 400 Bad Request\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", strlen(html));
+            send(ctx->client_socket, header, (int)strlen(header), 0);
+            send(ctx->client_socket, html, (int)strlen(html), 0);
+            
+            lith_close_socket(ctx->client_socket);
+            free(ctx);
+            return NULL;
         }
+
+        lith_log(LOG_INFO, "Request: %s %s", method_to_str(req.method), req.path);
+
+        // SECURITY CHECK: Anti-Directory Traversal
+        if (!is_safe_path(req.path)) {
+            lith_log(LOG_WARN, "Security Alert: Blocked traversal attempt on path: %s", req.path);
+            const char *html = get_error_html(403, "Forbidden", "Access to this resource is strictly prohibited.");
+            char header[256];
+            sprintf(header, "HTTP/1.1 403 Forbidden\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", strlen(html));
+            send(ctx->client_socket, header, (int)strlen(header), 0);
+            send(ctx->client_socket, html, (int)strlen(html), 0);
+            
+            lith_close_socket(ctx->client_socket);
+            free(ctx);
+            return NULL;
+        }
+
+        char file_path[512] = "public";
+        if (strcmp(req.path, "/") == 0) {
+            strcat(file_path, "/index.html");
+        } else {
+            strcat(file_path, req.path);
+        }
+
+        long file_size = 0;
+        char *file_content = read_file(file_path, &file_size);
+
+        if (file_content) {
+            char header[384];
+            const char *mime_type = get_mime_type(file_path);
+
+            sprintf(header, 
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Length: %ld\r\n"
+                    "Content-Type: %s\r\n"
+                    "Connection: close\r\n\r\n", 
+                    file_size, mime_type);
+
+            send(ctx->client_socket, header, (int)strlen(header), 0);
+            send(ctx->client_socket, file_content, (int)file_size, 0);
+            free(file_content);
+        } else {
+            // ERROR 404: Not Found
+            lith_log(LOG_WARN, "404 - Not Found: %s", file_path);
+            const char *html = get_error_html(404, "Not Found", "The requested URL or resource could not be located on this server.");
+            char header[256];
+            sprintf(header, "HTTP/1.1 404 Not Found\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", strlen(html));
+            send(ctx->client_socket, header, (int)strlen(header), 0);
+            send(ctx->client_socket, html, (int)strlen(html), 0);
+        }
+    } else {
+        // ERROR 500: Internal Server Error
+        lith_log(LOG_ERROR, "500 - Internal Server Error on network receive");
+        const char *html = get_error_html(500, "Internal Server Error", "The server encountered an unexpected condition during socket stream isolation.");
+        char header[256];
+        sprintf(header, "HTTP/1.1 500 Internal Server Error\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", strlen(html));
+        send(ctx->client_socket, header, (int)strlen(header), 0);
+        send(ctx->client_socket, html, (int)strlen(html), 0);
     }
 
     lith_close_socket(ctx->client_socket);
@@ -124,12 +151,10 @@ int lith_init_server(int port) {
 
     int opt = 1;
 #ifdef _WIN32
-    // Sous Windows, SO_EXCLUSIVEADDRUSE empêche le vol de port ou la superposition permissive d'instances
     if (setsockopt(server_fd, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&opt, sizeof(opt)) < 0) {
         lith_log(LOG_WARN, "Failed to set SO_EXCLUSIVEADDRUSE");
     }
 #else
-    // Sous Linux / macOS, SO_REUSEADDR permet de réutiliser rapidement le port après un crash sans être permissif
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt)) < 0) {
         lith_log(LOG_WARN, "Failed to set SO_REUSEADDR");
     }
@@ -140,7 +165,6 @@ int lith_init_server(int port) {
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(port);
 
-    // Si le port est déjà occupé, le bind() échouera immédiatement au lieu de se lancer en tâche aveugle
     if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         lith_log(LOG_ERROR, "Bind failed on port %d. Port might already be in use.", port);
         lith_close_socket(server_fd);

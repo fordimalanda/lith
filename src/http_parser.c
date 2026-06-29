@@ -85,3 +85,41 @@ const char* get_mime_type(const char *path) {
 
     return "application/octet-stream";
 }
+
+/**
+ * Generates a centralized styled HTML error page
+ * Returns a pointer to a static buffer containing the HTML
+ */
+const char* get_error_html(int status_code, const char *title, const char *message) {
+    static char error_buffer[1024];
+    
+    snprintf(error_buffer, sizeof(error_buffer),
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\">\n"
+        "<head>\n"
+        "    <meta charset=\"UTF-8\">\n"
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+        "    <title>%d - %s</title>\n"
+        "    <style>\n"
+        "        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }\n"
+        "        .error-card { text-align: center; background: #1e293b; padding: 3rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-width: 450px; width: 90%%; border: 1px solid rgba(239, 68, 68, 0.2); }\n"
+        "        h1 { font-size: 4rem; margin: 0; color: #ef4444; font-weight: 800; }\n"
+        "        h2 { font-size: 1.5rem; margin: 0.5rem 0 1rem 0; color: #e2e8f0; }\n"
+        "        p { color: #94a3b8; line-height: 1.6; margin-bottom: 2rem; }\n"
+        "        .footer { font-size: 0.8rem; color: #64748b; border-top: 1px solid #334155; padding-top: 1rem; }\n"
+        "    </style>\n"
+        "</head>\n"
+        "<body>\n"
+        "    <div class=\"error-card\">\n"
+        "        <h1>%d</h1>\n"
+        "        <h2>%s</h2>\n"
+        "        <p>%s</p>\n"
+        "        <div class=\"footer\">LITH Server • Powered by FomaDev</div>\n"
+        "    </div>\n"
+        "</body>\n"
+        "</html>",
+        status_code, title, status_code, title, message
+    );
+    
+    return error_buffer;
+}

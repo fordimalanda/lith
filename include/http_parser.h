@@ -23,4 +23,7 @@ const char* method_to_str(HttpMethod method);
 // Déclaration pour la gestion dynamique des types MIME
 const char* get_mime_type(const char *path);
 
+// Génération centralisée de pages d'erreur HTML stylisées
+const char* get_error_html(int status_code, const char *title, const char *message);
+
 #endif
