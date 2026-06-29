@@ -56,7 +56,7 @@ Default server configurations are managed statically via macros located within `
 
 * `BACKLOG`: 10 pending connection limits
 
-* `LITH_VERSION`: 1.0.1
+* `LITH_VERSION`: 1.0.1.1
 
 ## License
 
