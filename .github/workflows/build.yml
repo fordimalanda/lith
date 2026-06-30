@@ -20,15 +20,12 @@ jobs:
         include:
           - os: ubuntu-latest
             local_name: Linux
-            artifact_name: lith-linux.tar.gz
             asset_path: lith-linux.tar.gz
           - os: windows-latest
             local_name: Windows
-            artifact_name: lith-windows.zip
             asset_path: lith-windows.zip
           - os: macos-latest
             local_name: Mac
-            artifact_name: lith-mac.tar.gz
             asset_path: lith-mac.tar.gz
 
     steps:
@@ -55,42 +52,42 @@ jobs:
         mkdir -p bin
         make
 
+    # Alignement de l'arborescence intermédiaire du build de test
     - name: Prepare Workspace Folder Structure
       shell: bash
       run: |
+        mkdir -p dist/bin
         mkdir -p dist/public
-        if [ -d "public" ] && [ "$(ls -A public 2>/dev/null)" ]; then
-          cp -r public/* dist/public/
-        else
-          touch dist/public/.gitkeep
-        fi
         
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          cp bin/lith.exe dist/lith.exe
+          cp bin/lith.exe dist/bin/lith.exe
         else
-          cp bin/lith dist/lith
+          cp bin/lith dist/bin/lith
         fi
+        
+        if [ -f "lith.conf" ]; then cp lith.conf dist/lith.conf; fi
+        if [ -f "public/index.html" ]; then cp public/index.html dist/public/index.html; fi
 
     - name: Package Windows Artifact (.zip)
       if: matrix.os == 'windows-latest'
       shell: bash
       run: |
         cd dist
-        7z a ../lith-windows.zip lith.exe public/
+        7z a ../lith-windows.zip bin/ public/ lith.conf
 
     - name: Package Linux Artifact (.tar.gz)
       if: matrix.os == 'ubuntu-latest'
       shell: bash
       run: |
         cd dist
-        tar -czf ../lith-linux.tar.gz lith public/
+        tar -czf ../lith-linux.tar.gz bin/ public/ lith.conf
 
     - name: Package Mac Artifact (.tar.gz)
       if: matrix.os == 'macos-latest'
       shell: bash
       run: |
         cd dist
-        tar -czf ../lith-mac.tar.gz lith public/
+        tar -czf ../lith-mac.tar.gz bin/ public/ lith.conf
 
     - name: Upload Intermediate Platform Artifacts
       uses: actions/upload-artifact@v4

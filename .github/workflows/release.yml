@@ -3,16 +3,13 @@ name: Release and Deploy LITH
 on:
   push:
     tags:
-      - 'v*' # Se déclenche uniquement lorsqu'un tag commençant par 'v' est poussé
+      - 'v*'
 
 jobs:
   release-assets:
     name: Build and Publish Release Assets
     runs-on: ${{ matrix.os }}
     
-    # -------------------------------------------------------------
-    # AJOUT CRUCIAL : Donne l'autorisation d'écrire la Release
-    # -------------------------------------------------------------
     permissions:
       contents: write
       
@@ -34,7 +31,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Configuration du compilateur pour l'environnement Windows
     - name: Set up GCC (Windows)
       if: matrix.os == 'windows-latest'
       uses: msys2/setup-msys2@v2
@@ -42,14 +38,12 @@ jobs:
         msystem: MINGW64
         install: mingw-w64-x86_64-gcc gcc make
 
-    # Compilation sous Linux & Mac
     - name: Compile LITH (Linux & Mac)
       if: matrix.os != 'windows-latest'
       run: |
         mkdir -p bin
         make
 
-    # Compilation sous Windows via MSYS2
     - name: Compile LITH (Windows)
       if: matrix.os == 'windows-latest'
       shell: msys2 {0}
@@ -57,55 +51,51 @@ jobs:
         mkdir -p bin
         make
 
-    # Extraction dynamique de la version du Tag (ex: v1.0.4)
     - name: Get Version from Tag
       id: get_version
       shell: bash
       run: |
         echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-    # Structuration du dossier de distribution propre
+    # Génération de la structure demandée : bin/lith, public/index.html et lith.conf
     - name: Prepare Workspace Structure
       shell: bash
       run: |
+        mkdir -p dist/bin
         mkdir -p dist/public
-        if [ -d "public" ] && [ "$(ls -A public 2>/dev/null)" ]; then
-          cp -r public/* dist/public/
+        
+        # Copie de l'exécutable dans dist/bin/
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          cp bin/lith.exe dist/bin/lith.exe
         else
-          touch dist/public/.gitkeep
+          cp bin/lith dist/bin/lith
         fi
         
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          cp bin/lith.exe dist/lith.exe
-        else
-          cp bin/lith dist/lith
-        fi
+        # Copie des fichiers d'accompagnement essentiels
+        if [ -f "lith.conf" ]; then cp lith.conf dist/lith.conf; fi
+        if [ -f "public/index.html" ]; then cp public/index.html dist/public/index.html; fi
 
-    # Packaging Windows avec le nommage professionnel exigé
     - name: Package Windows Artifact
       if: matrix.os == 'windows-latest'
       shell: bash
       run: |
         cd dist
-        7z a ../lith-windows-${{ steps.get_version.outputs.TAG_NAME }}-x64.zip lith.exe public/
+        7z a ../lith-windows-${{ steps.get_version.outputs.TAG_NAME }}-x64.zip bin/ public/ lith.conf
 
-    # Packaging Linux avec le nommage professionnel exigé
     - name: Package Linux Artifact
       if: matrix.os == 'ubuntu-latest'
       shell: bash
       run: |
         cd dist
-        tar -czf ../lith-linux-${{ steps.get_version.outputs.TAG_NAME }}-x64.tar.gz lith public/
+        tar -czf ../lith-linux-${{ steps.get_version.outputs.TAG_NAME }}-x64.tar.gz bin/ public/ lith.conf
 
-    # Packaging Mac avec le nommage professionnel exigé
     - name: Package Mac Artifact
       if: matrix.os == 'macos-latest'
       shell: bash
       run: |
         cd dist
-        tar -czf ../lith-mac-${{ steps.get_version.outputs.TAG_NAME }}-x64.tar.gz lith public/
+        tar -czf ../lith-mac-${{ steps.get_version.outputs.TAG_NAME }}-x64.tar.gz bin/ public/ lith.conf
 
-    # Téléversement automatique de l'archive générée directement sur la GitHub Release
     - name: Upload Binary to GitHub Release
       uses: softprops/action-gh-release@v2
       with:
