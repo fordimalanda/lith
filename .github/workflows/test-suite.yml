@@ -73,6 +73,7 @@ jobs:
         echo "=================================================="
         echo " TEST 3: Security - Directory Traversal Barrier "
         echo "=================================================="
+        # L'option --path-as-is force curl à envoyer les '../' sans les résoudre localement.
         SEC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --path-as-is http://localhost:8888/../../etc/passwd)
         if [ "$SEC_STATUS" -eq 400 ] || [ "$SEC_STATUS" -eq 403 ] || [ "$SEC_STATUS" -eq 404 ]; then
           echo "✅ Security Guard Success: Traversal blocked or mitigated with HTTP $SEC_STATUS"
@@ -136,22 +137,26 @@ jobs:
         echo "=================================================="
         START_TIME=$(date +%s)
         
-        echo "Simulating a slow request (sending partial headers and sleeping)..."
-        # On ouvre une connexion, envoie une en-tête tronquée et on attend 4 secondes (LITH doit couper à 3s)
-        (echo -e "POST /api/test HTTP/1.1\r\nContent-Length: 100\r\n"; sleep 4) | nc -w 6 localhost 8888 || true
+        echo "Simulating a true hung connection (Client stalls for 7 seconds)..."
+        # On injecte un en-tête incomplet et on bloque le client pendant 7 secondes.
+        # L'option -w 5 de nc sert de garde-fou local.
+        (echo -e "POST /api/test HTTP/1.1\r\nContent-Length: 100\r\n"; sleep 7) | nc -w 5 localhost 8888 || true
         
         END_TIME=$(date +%s)
         DURATION=$((END_TIME - START_TIME))
         echo "Connection lasted for: $DURATION seconds"
 
-        if [ "$DURATION" -ge 4 ]; then
-          echo "❌ CRITICAL FAULT: LITH is vulnerable to Slowloris / Hung connections! (No active timeout)"
+        # Si LITH a correctement appliqué son SO_RCVTIMEO de 3s, il a coupé le socket.
+        # Netcat s'est arrêté immédiatement. DURATION doit être d'environ 3 secondes.
+        # Si DURATION est >= 5, le serveur a attendu la mort de netcat -> Échec.
+        if [ "$DURATION" -ge 5 ]; then
+          echo "❌ CRITICAL FAULT: LITH kept the socket open too long ($DURATIONs)! Vulnerable to Slowloris."
           kill $SERVER_PID; exit 1
         else
-          echo "✅ PASSED: Socket timeout successfully triggered. Dead connection dropped in $DURATION seconds."
+          echo "✅ PASSED: Socket timeout successfully triggered. Connection dropped cleanly in $DURATION seconds."
         fi
 
-        echo "Checking if server is still operational for legitimate users..."
+        echo "Checking if server survived and remains operational..."
         curl -s -I http://localhost:8888/ | grep -q "200 OK" && echo "✅ Server is alive and healthy!"
 
         # Fin globale de la suite de tests
