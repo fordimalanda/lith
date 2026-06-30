@@ -1,4 +1,10 @@
+/* * Copyright (c) 2026 Fordi / FomaDev. 
+ * Licensed under FomaDev Public License.
+ * See LICENSE file in the project root for full license information.
+ */
+
 #include "server.h"
+#include "server_utils.h"
 #include "logger.h"
 #include <stdio.h>
 #include <stdlib.h>

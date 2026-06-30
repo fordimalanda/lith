@@ -8,7 +8,6 @@
     #include <winsock2.h>
     #include <ws2tcpip.h>
     typedef SOCKET socket_t;
-    typedef int socklen_t;
 #else
     #include <sys/socket.h>
     #include <sys/time.h>
@@ -16,7 +15,6 @@
     #include <arpa/inet.h>
     #include <unistd.h>
     typedef int socket_t;
-    typedef socklen_t system_socklen_t;
 #endif
 
 #include <pthread.h>

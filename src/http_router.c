@@ -1,3 +1,8 @@
+/* * Copyright (c) 2026 Fordi / FomaDev. 
+ * Licensed under FomaDev Public License.
+ * See LICENSE file in the project root for full license information.
+ */
+
 #include "http_router.h"
 #include "server_utils.h"
 #include "logger.h"
@@ -17,7 +22,7 @@ void send_http_error(socket_t client_socket, int status_code, const char *status
 
 void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full_buffer, int total_received) {
     ClientContext *ctx = &(ectx->base_ctx);
-    (void)full_buffer; // Préservé pour de futurs besoins d'inspection brute
+    (void)full_buffer; 
     (void)total_received;
 
     lith_log(LOG_INFO, "Request: %s %s", method_to_str(req->method), req->path);

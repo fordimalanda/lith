@@ -1,3 +1,8 @@
+/* * Copyright (c) 2026 Fordi / FomaDev. 
+ * Licensed under FomaDev Public License.
+ * See LICENSE file in the project root for full license information.
+ */
+
 #include "server.h"
 #include "server_utils.h"
 #include "logger.h"
@@ -27,38 +32,44 @@ void *lith_client_handler(void *arg) {
         if (parse_http_request(full_buffer, &req) != 0) {
             lith_log(LOG_WARN, "400 - Bad Request parsing failed");
             send_http_error(ctx->client_socket, 400, "Bad Request", "The server could not understand the request due to malformed syntax.");
+            
+            // SÉCURITÉ : On nettoie et on quitte immédiatement ici en cas d'échec de parsing
+            lith_close_socket(ctx->client_socket);
+            free(full_buffer);
+            free(ectx);
+            return NULL;
         } 
-        else {
-            // --- GESTION DU CORPS DE LA REQUÊTE HTTP POST ---
-            if (req.method == METHOD_POST && req.content_length > 0) {
-                long already_received_body = 0;
-                if (req.body_start) {
-                    already_received_body = total_received - (req.body_start - full_buffer);
-                }
 
-                while (already_received_body < req.content_length) {
-                    long remaining = req.content_length - already_received_body;
-                    if (total_received >= (BUFFER_SIZE * 4) - 1) {
-                        lith_log(LOG_WARN, "413 - Payload Too Large: Client bytes exceed allocated space");
-                        break;
-                    }
-
-                    int n = recv(ctx->client_socket, full_buffer + total_received, remaining, 0);
-                    if (n <= 0) {
-                        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                            lith_log(LOG_WARN, "Network receive timeout triggered during POST body streaming");
-                        }
-                        break;
-                    }
-                    total_received += n;
-                    already_received_body += n;
-                }
-                parse_http_request(full_buffer, &req);
+        // --- GESTION DU CORPS DE LA REQUÊTE HTTP POST ---
+        if (req.method == METHOD_POST && req.content_length > 0) {
+            long already_received_body = 0;
+            if (req.body_start) {
+                already_received_body = total_received - (req.body_start - full_buffer);
             }
 
-            // Exécution du routage applicatif
-            handle_http_route(ectx, &req, full_buffer, total_received);
+            while (already_received_body < req.content_length) {
+                long remaining = req.content_length - already_received_body;
+                if (total_received >= (BUFFER_SIZE * 4) - 1) {
+                    lith_log(LOG_WARN, "413 - Payload Too Large: Client bytes exceed allocated space");
+                    break;
+                }
+
+                int n = recv(ctx->client_socket, full_buffer + total_received, remaining, 0);
+                if (n <= 0) {
+                    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                        lith_log(LOG_WARN, "Network receive timeout triggered during POST body streaming");
+                    }
+                    break;
+                }
+                total_received += n;
+                already_received_body += n;
+            }
+            parse_http_request(full_buffer, &req);
         }
+
+        // Exécution du routage applicatif
+        handle_http_route(ectx, &req, full_buffer, total_received);
+
     } else {
         if (total_received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             lith_log(LOG_WARN, "408 - Request Timeout: Client failed to send data within the window");
