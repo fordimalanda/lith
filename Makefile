@@ -13,11 +13,9 @@ ifeq ($(OS),Windows_NT)
     LIBS = -lws2_32
     TARGET := $(TARGET).exe
     MKDIR = if not exist $(TARGET_DIR) mkdir $(TARGET_DIR)
-    CLEAN_CMD = del /q /s src\*.o src\server\*.o src\*.d src\server\*.d 2>nul & del /q $(TARGET_DIR)\* 2>nul
 else
     LIBS = 
     MKDIR = mkdir -p $(TARGET_DIR)
-    CLEAN_CMD = rm -f src/*.o src/server/*.o src/*.d src/server/*.d $(TARGET_DIR)/*
 endif
 
 # 2. Détection automatique des sources et des objets
@@ -44,6 +42,14 @@ $(TARGET): $(OBJ)
 
 # 7. Nettoyage portable et robuste des artefacts de build
 clean:
-	$(CLEAN_CMD)
+ifeq ($(OS),Windows_NT)
+	-@if exist src\*.o del /q /s src\*.o >nul 2>&1
+	-@if exist src\server\*.o del /q /s src\server\*.o >nul 2>&1
+	-@if exist src\*.d del /q /s src\*.d >nul 2>&1
+	-@if exist src\server\*.d del /q /s src\server\*.d >nul 2>&1
+	-@if exist $(TARGET_DIR) del /q $(TARGET_DIR)\* >nul 2>&1
+else
+	rm -f src/*.o src/server/*.o src/*.d src/server/*.d $(TARGET_DIR)/*
+endif
 
 .PHONY: all clean
