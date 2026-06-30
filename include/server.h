@@ -1,3 +1,8 @@
+/* * Copyright (c) 2026 Fordi / FomaDev. 
+ * Licensed under FomaDev Public License.
+ * See LICENSE file in the project root for full license information.
+ */
+
 #ifndef SERVER_H
 #define SERVER_H
 
@@ -23,6 +28,8 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "common.h" // Assure l'accès à ServerConfig
+
 #define DEFAULT_PORT 8090
 #define BACKLOG 10
 #define BUFFER_SIZE 4096
@@ -30,11 +37,13 @@
 typedef struct {
     socket_t client_socket;
     struct sockaddr_in client_address;
+    // Note optionnelle : vous pourrez y ajouter un pointeur vers la config si le handler en a besoin
 } ClientContext;
 
-// Déclarations des fonctions uniquement
-int lith_init_server(int port);
-void lith_start_server(int server_fd);
+/* Déclarations des fonctions de configuration et cycle de vie */
+int load_config(const char *filename, ServerConfig *config);
+int lith_init_server(const ServerConfig *config);
+void lith_start_server(int server_fd, const ServerConfig *config);
 void *lith_client_handler(void *arg);
 void lith_close_socket(socket_t s);
 
