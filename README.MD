@@ -1,82 +1,83 @@
 # LITH - Light HTTP Server
 
-LITH is a minimalist, high-performance, multi-threaded HTTP server implemented in standard C11. Built to be exceptionally lightweight and portable, it provides native support for Windows (via MinGW-w64 and Winsock2), macOS, and Linux systems. It is engineered with security, robust network lifecycle management, and performance in mind.
+LITH is a minimalist, high-performance, multi-threaded HTTP server implemented in standard C11. Engineered to be exceptionally lightweight, modular, and portable, it provides native support for Windows (via MinGW-w64 and Winsock2), macOS, and Linux systems. It is designed with robust network lifecycle management, native multi-threading, and zero external software dependencies.
 
-## Features
+## Key Features
 
-- **Multi-threaded Architecture**: Utilizes pthreads to handle multiple simultaneous client connections efficiently without blocking the core socket listener.
-- **External Configuration Engine**: Dynamically parses a localized configuration file (`lith.conf`) at initialization to modify runtime settings like ports and target root directories without requiring code recompilation.
-- **Dynamic MIME Type Resolution**: Automatically detects file extensions to serve proper `Content-Type` headers, enabling native web browser rendering for modern multi-resource web applications.
-- **Unified Error Handling Layouts**: Replaces raw text exceptions with centralized, professional dark-themed HTML canvas pages for standard HTTP errors (`400 Bad Request`, `403 Forbidden`, `404 Not Found`, and `500 Internal Server Error`).
-- **Cross-Platform Socket Layer**: Full compilation compatibility across Windows and POSIX-compliant environments using granular, isolated compile-time hardware abstractions.
-- **Strict Port Collision Guard**: Advanced validation layer preventing concurrent process overlaps on identical network ports, terminating gracefully with precise diagnostic logs.
-- **Directory Traversal Protection**: Integrated path canonicalization security filters that immediately intercept and block malicious relative path execution (`..`).
-- **Embedded Logger**: Real-time unified console logging mechanism mapping detailed operational timestamps, network states, and transaction levels (`INFO`, `WARN`, `ERROR`).
-- **Zero Dependencies**: Relies exclusively on standard operating system C runtime components, maintaining a minimal production binary footprint.
+- **Multi-threaded Architecture**: Utilizes POSIX threads (`pthreads`) to handle multiple simultaneous client connections efficiently, preventing the core network listener from blocking.
+- **I/O Engine (v1.0.5 POST Support)**: Features advanced network stream processing to fully parse incoming HTTP `POST` requests, including chunked or fragmented payloads using precise `Content-Length` validation.
+- **Modular Directory Architecture**: Separates the core networking engine from configuration management and server utility modules.
+- **External Configuration Engine**: Dynamically loads runtime settings from a `lith.conf` configuration file without requiring recompilation.
+- **Dynamic MIME Type Resolution**: Automatically maps file extensions to their corresponding IANA media types for proper browser rendering.
+- **Unified Security & Path Filters**: Protects against directory traversal attacks by detecting and rejecting malicious relative path patterns such as `..`.
+- **Graceful Port Guard**: Detects socket binding conflicts during startup and exits gracefully with informative logs.
+- **Unified Error Canvas Layouts**: Serves clean, dark-themed HTML error pages for common HTTP status codes (`400`, `403`, `404`, and `500`).
+- **Zero Dependencies**: Built exclusively on standard operating system APIs, ensuring a minimal binary footprint.
 
-## Run
+---
 
-### Prerequisites
+## Quick Start
 
-To build LITH from source, you need:
-- A GCC compiler toolchain (MinGW-w64 for Windows environments, or native GCC for Linux/macOS suites).
-- GNU Make utility.
+### 1. Configuration (`lith.conf`)
 
-### Configuration (`lith.conf`)
-
-LITH uses an external configuration file named `lith.conf` located at the root of the project execution context. You can tweak its values on the fly without building the binary again:
+LITH loads its runtime configuration from a file named `lith.conf` located in the application's root directory.
 
 ```ini
-# Port d'écoute du serveur réseau
+# Network listening port
 PORT=8090
 
-# Répertoire contenant les fichiers statiques web à servir
+# Directory containing static web assets
 PUBLIC_DIR=public
 ```
 
-### Usage Instructions
+### 2. Deployment
 
-1. **Deploy Web Content**: Place your web directory trees and static assets (such as `.html`, `.css`, `.js`, `.png`, `.jpg`, `.ico`, `.json`) directly inside the `public/` folder at the root of the project.
+Place your web assets (`.html`, `.css`, `.js`, `.png`, `.jpg`, `.svg`, `.json`, etc.) inside the configured `public/` directory.
 
-2. **Launch the Executable**: Execute the compiled structural binary from your shell command line interface:
-    ```bash
-    bin/lith
-    ```
+Start the server:
 
-3. **Specify a Custom Port Surcharge (Optional)**: While the server loads parameters from `lith.conf` by default, you can override the network port configuration at launch using a high-priority CLI token argument:
-    ```bash
-    bin/lith 8005
-    ```
+```bash
+bin/lith
+```
 
-4. **Access the Application**: Open any compatible web browser and target your local loopback infrastructure: `http://localhost:8005`.
+Optionally, override the configured port at runtime:
+
+```bash
+bin/lith 8005
+```
+
+Open your browser and navigate to:
+
+```text
+http://localhost:8005
+```
+
+---
 
 ## Repository Architecture
 
-The codebase follows a modular design pattern ensuring clear separation of concerns:
+```text
+.
+├── bin/              # Output directory for compiled executable binaries
+├── include/          # Header files, macros, and cross-platform abstractions
+├── public/           # Static web root
+├── src/
+│   ├── server/       # Configuration parser and server utilities
+│   └── ...           # Core HTTP server implementation
+├── lith.conf         # Runtime configuration
+└── Makefile          # Cross-platform GNU Make build script
+```
 
-* `src/`: Core logical modules handling low-level network sockets, server multi-threaded lifecycle execution, HTTP stream parsing, and internal logging routines (`.c`).
-* `include/`: Global structure declarations, networking macro mappings, operational boundary constants, and OS-specific binding configurations (`.h`).
-* `public/`: The localized safe sandbox environment acting as the default root for served static payloads.
-* `bin/`: The build output directory reserved for finalized executable binaries.
-* `lith.conf`: External runtime environment setup metadata.
+---
 
-## Server Settings
+## Technical Specifications
 
-Default backend configurations are statically optimized via macro bindings located within `include/server.h` and `include/common.h`:
-
-* `DEFAULT_PORT`: 8090
-* `BUFFER_SIZE`: 4096 bytes
-* `BACKLOG`: 10 maximum pending connection queues
-* `LITH_VERSION`: 1.0.4
-
-## Supported Asset Formats
-
-LITH natively decodes and streams the following web layouts:
-- **Documents & Layouts**: `.html`, `.htm`, `.txt`
-- **Styles & Scripts**: `.css`, `.js`
-- **Data Schemas**: `.json`
-- **Graphics**: `.png`, `.jpg`, `.jpeg`, `.gif`, `.ico`
-- *Other formats safely fall back to standard `application/octet-stream` byte matching.*
+| Parameter | Default Value | Description |
+|-----------|--------------:|-------------|
+| `LITH_VERSION` | `1.0.5` | Current stable release version |
+| `BUFFER_SIZE` | `4096 bytes` | Standard socket read/write buffer size |
+| `BACKLOG` | `10` | Maximum number of pending client connections |
+| `Maximum Buffer` | `16 KB` | Maximum buffer size used for HTTP header and body parsing |
 
 ## License
 
