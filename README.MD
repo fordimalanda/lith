@@ -5,9 +5,10 @@ LITH is a minimalist, high-performance, multi-threaded HTTP server implemented i
 ## Features
 
 - **Multi-threaded Architecture**: Utilizes pthreads to handle multiple simultaneous client connections efficiently without blocking the core socket listener.
+- **External Configuration Engine**: Dynamically parses a localized configuration file (`lith.conf`) at initialization to modify runtime settings like ports and target root directories without requiring code recompilation.
 - **Dynamic MIME Type Resolution**: Automatically detects file extensions to serve proper `Content-Type` headers, enabling native web browser rendering for modern multi-resource web applications.
 - **Unified Error Handling Layouts**: Replaces raw text exceptions with centralized, professional dark-themed HTML canvas pages for standard HTTP errors (`400 Bad Request`, `403 Forbidden`, `404 Not Found`, and `500 Internal Server Error`).
-- **Cross-Platform Socket Layer**: Full compilation compatibility across Windows and POSIX-compliant environments using granular compile-time hardware abstractions.
+- **Cross-Platform Socket Layer**: Full compilation compatibility across Windows and POSIX-compliant environments using granular, isolated compile-time hardware abstractions.
 - **Strict Port Collision Guard**: Advanced validation layer preventing concurrent process overlaps on identical network ports, terminating gracefully with precise diagnostic logs.
 - **Directory Traversal Protection**: Integrated path canonicalization security filters that immediately intercept and block malicious relative path execution (`..`).
 - **Embedded Logger**: Real-time unified console logging mechanism mapping detailed operational timestamps, network states, and transaction levels (`INFO`, `WARN`, `ERROR`).
@@ -21,6 +22,18 @@ To build LITH from source, you need:
 - A GCC compiler toolchain (MinGW-w64 for Windows environments, or native GCC for Linux/macOS suites).
 - GNU Make utility.
 
+### Configuration (`lith.conf`)
+
+LITH uses an external configuration file named `lith.conf` located at the root of the project execution context. You can tweak its values on the fly without building the binary again:
+
+```ini
+# Port d'écoute du serveur réseau
+PORT=8090
+
+# Répertoire contenant les fichiers statiques web à servir
+PUBLIC_DIR=public
+```
+
 ### Usage Instructions
 
 1. **Deploy Web Content**: Place your web directory trees and static assets (such as `.html`, `.css`, `.js`, `.png`, `.jpg`, `.ico`, `.json`) directly inside the `public/` folder at the root of the project.
@@ -30,7 +43,7 @@ To build LITH from source, you need:
     bin/lith
     ```
 
-3. **Specify a Custom Port (Optional)**: By default, the server initializes on port 8090. You can override this behavior dynamically by appending a valid port binding token as an argument:
+3. **Specify a Custom Port Surcharge (Optional)**: While the server loads parameters from `lith.conf` by default, you can override the network port configuration at launch using a high-priority CLI token argument:
     ```bash
     bin/lith 8005
     ```
@@ -45,6 +58,7 @@ The codebase follows a modular design pattern ensuring clear separation of conce
 * `include/`: Global structure declarations, networking macro mappings, operational boundary constants, and OS-specific binding configurations (`.h`).
 * `public/`: The localized safe sandbox environment acting as the default root for served static payloads.
 * `bin/`: The build output directory reserved for finalized executable binaries.
+* `lith.conf`: External runtime environment setup metadata.
 
 ## Server Settings
 
@@ -53,7 +67,7 @@ Default backend configurations are statically optimized via macro bindings locat
 * `DEFAULT_PORT`: 8090
 * `BUFFER_SIZE`: 4096 bytes
 * `BACKLOG`: 10 maximum pending connection queues
-* `LITH_VERSION`: 1.0.3
+* `LITH_VERSION`: 1.0.4
 
 ## Supported Asset Formats
 
