@@ -69,7 +69,7 @@ void *lith_client_handler(void *arg) {
 
                 int n = recv(ctx->client_socket, full_buffer + total_received, remaining, 0);
                 if (n <= 0) {
-                    break; // Déconnexion ou erreur de lecture réseau
+                    break; // Déconnexion ou expiration du timeout réseau (SO_RCVTIMEO)
                 }
                 total_received += n;
                 already_received_body += n;
@@ -81,7 +81,7 @@ void *lith_client_handler(void *arg) {
 
         lith_log(LOG_INFO, "Request: %s %s", method_to_str(req.method), req.path);
 
-        // --- AGUILLAGE DES MÉTHODES HTTP ---
+        // --- AIGUILLAGE DES MÉTHODES HTTP ---
         if (req.method == METHOD_POST) {
             // Traitement applicatif d'une route API POST pour la v1.0.5
             // Pour l'instant, on lit le corps reçu et on le renvoie en écho (Echo Server)
@@ -149,8 +149,8 @@ void *lith_client_handler(void *arg) {
             }
         }
     } else {
-        lith_log(LOG_ERROR, "500 - Internal Server Error on network receive");
-        const char *html = get_error_html(500, "Internal Server Error", "The server encountered an unexpected condition.");
+        lith_log(LOG_ERROR, "500 - Internal Server Error or Timeout on network receive");
+        const char *html = get_error_html(500, "Internal Server Error", "The server encountered an unexpected condition or request timeout.");
         char header[256];
         sprintf(header, "HTTP/1.1 500 Internal Server Error\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", strlen(html));
         send(ctx->client_socket, header, (int)strlen(header), 0);
@@ -231,6 +231,18 @@ void lith_start_server(int server_fd, const ServerConfig *config) {
             free(ectx);
             continue;
         }
+
+        // --- CONFIGURATION DU TIMEOUT SUR LE SOCKET CLIENT (Anti-Slowloris) ---
+#ifdef _WIN32
+        DWORD timeout = 3000; // 3000 millisecondes sous Windows
+        setsockopt(ectx->base_ctx.client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+#else
+        struct timeval tv;
+        tv.tv_sec = 3;  // 3 secondes de délai maximum
+        tv.tv_usec = 0;
+        setsockopt(ectx->base_ctx.client_socket, SOL_SOCKET, SO_RCVTIMEO, (const struct timeval *)&tv, sizeof(tv));
+#endif
+        // ---------------------------------------------------------------------
 
         pthread_t tid;
         if (pthread_create(&tid, NULL, lith_client_handler, ectx) == 0) {
