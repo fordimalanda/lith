@@ -7,9 +7,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 /**
- * Converts HttpMethod enum values to their corresponding string representations
+ * Convertit une valeur de l'énumération HttpMethod en sa représentation textuelle
  */
 const char* method_to_str(HttpMethod method) {
     switch (method) {
@@ -20,52 +21,63 @@ const char* method_to_str(HttpMethod method) {
 }
 
 /**
- * Parses a raw HTTP request string into an HttpRequest structure
- * Returns 0 on success, -1 on failure
+ * Analyse une requête HTTP brute pour remplir la structure HttpRequest
+ * Retourne 0 en cas de succès, -1 en cas d'échec
  */
-int parse_http_request(const char *raw_request, HttpRequest *out_request) {
-    if (!raw_request || !out_request) return -1;
+int parse_http_request(const char *buffer, HttpRequest *req) {
+    if (!buffer || !req) return -1;
 
-    // Réinitialisation de la structure cible
-    memset(out_request, 0, sizeof(HttpRequest));
-    out_request->method = METHOD_UNKNOWN;
+    // 1. Initialisation par défaut et remise à zéro
+    memset(req->path, 0, MAX_PATH_SIZE);
+    req->content_length = 0;
+    req->body_start = NULL;
 
-    char method_str[16] = {0};
-    char path_str[MAX_PATH_SIZE] = {0};
-
-    // Lecture de la Request-Line (Méthode et Chemin)
-    if (sscanf(raw_request, "%15s %255s", method_str, path_str) < 2) {
+    // 2. Détection de la méthode HTTP au début du buffer
+    const char *ptr = buffer;
+    if (strncmp(ptr, "GET ", 4) == 0) {
+        req->method = METHOD_GET;
+        ptr += 4;
+    } else if (strncmp(ptr, "POST ", 5) == 0) {
+        req->method = METHOD_POST;
+        ptr += 5;
+    } else {
+        req->method = METHOD_UNKNOWN;
         return -1;
     }
 
-    // Identification de la méthode HTTP
-    if (strcmp(method_str, "GET") == 0) {
-        out_request->method = METHOD_GET;
-    } else if (strcmp(method_str, "POST") == 0) {
-        out_request->method = METHOD_POST;
-    } else {
-        out_request->method = METHOD_UNKNOWN;
+    // 3. Extraction sécurisée du chemin (Path)
+    int i = 0;
+    while (*ptr && !isspace((unsigned char)*ptr) && i < (MAX_PATH_SIZE - 1)) {
+        req->path[i++] = *ptr++;
+    }
+    req->path[i] = '\0';
+
+    // 4. Si c'est un POST, extraction du Content-Length dans les en-têtes
+    if (req->method == METHOD_POST) {
+        // Recherche insensible à la casse (standard ou minuscules)
+        const char *cl_ptr = strstr(buffer, "Content-Length:");
+        if (!cl_ptr) {
+            cl_ptr = strstr(buffer, "content-length:");
+        }
+        
+        if (cl_ptr) {
+            cl_ptr += 15; // On avance après la chaîne "Content-Length:"
+            while (*cl_ptr == ' ') cl_ptr++; // Saute les espaces blancs optionnels
+            req->content_length = strtol(cl_ptr, NULL, 10);
+        }
     }
 
-    // Copie sécurisée du chemin d'accès
-    strncpy(out_request->path, path_str, MAX_PATH_SIZE - 1);
-    out_request->path[MAX_PATH_SIZE - 1] = '\0';
-
-    // Recherche basique du corps (Body) si présent (utile pour POST)
-    const char *body_start = strstr(raw_request, "\r\n\r\n");
-    if (body_start) {
-        body_start += 4; // Avance après les caractères de fin d'en-tête
-        strncpy(out_request->body, body_start, MAX_BODY_SIZE - 1);
-        out_request->body[MAX_BODY_SIZE - 1] = '\0';
-        out_request->content_length = (int)strlen(out_request->body);
+    // 5. Localisation du début du Body (immédiatement après la double fin de ligne)
+    const char *body_marker = strstr(buffer, "\r\n\r\n");
+    if (body_marker) {
+        req->body_start = body_marker + 4; // On saute les 4 octets de "\r\n\r\n"
     }
 
     return 0;
 }
 
 /**
- * Extracts the file extension and returns the corresponding MIME type
- * Defaults to "application/octet-stream" if unknown or missing
+ * Extrait l'extension du fichier et retourne le type MIME correspondant
  */
 const char* get_mime_type(const char *path) {
     if (!path) return "application/octet-stream";
@@ -87,11 +99,10 @@ const char* get_mime_type(const char *path) {
 }
 
 /**
- * Generates a centralized styled HTML error page
- * Returns a pointer to a static buffer containing the HTML
+ * Génère une page d'erreur HTML stylisée centralisée
+ * Retourne un pointeur vers un buffer statique (non persistant multi-thread simultané)
  */
 const char* get_error_html(int status_code, const char *title, const char *message) {
-    // Augmentation de la taille à 2048 pour accueillir tout le HTML + CSS + Messages sans troncature
     static char error_buffer[2048];
     
     snprintf(error_buffer, sizeof(error_buffer),
