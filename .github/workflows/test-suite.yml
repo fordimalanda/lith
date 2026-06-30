@@ -19,7 +19,7 @@ jobs:
     - name: Install Toolchain and Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential curl jq
+        sudo apt-get install -y build-essential curl jq apache2-utils
 
     - name: Prepare Local Test Environment
       run: |
@@ -87,7 +87,7 @@ jobs:
         echo "=================================================="
         echo " 🏋️ TEST 4: Stress & File Descriptor Leak Testing "
         echo "=================================================="
-        # Mesure initiale des descripteurs ouverts par LITH (stdin, stdout, stderr, listen socket, etc.)
+        # Mesure initiale des descripteurs ouverts par LITH
         INITIAL_FD_COUNT=$(ls /proc/$SERVER_PID/fd | wc -l)
         echo "Initial open File Descriptors: $INITIAL_FD_COUNT"
         
@@ -97,7 +97,7 @@ jobs:
           curl -s -X POST -H "Content-Type: application/json" -d '{"stress":"test"}' http://localhost:8888/api/test -o /dev/null
         done
         
-        # CRUCIAL : Laisser 1 seconde pour que les derniers pthreads terminent leur clean-up
+        # Laisser 1 seconde pour que les derniers pthreads terminent leur clean-up
         sleep 1
         
         # Mesure finale
@@ -112,8 +112,39 @@ jobs:
           echo "✅ PASSED: Structural socket sealing is perfect. Zero leaks detected."
         fi
 
-        # Nettoyage propre du processus en fin de validation
         echo "=================================================="
-        echo " 🎉 All modular integration tests passed successfully!"
+        echo " 🏎️ TEST 5: Thread Concurrency & Crash Testing "
+        echo "=================================================="
+        # Vérification préalable que le serveur a survécu aux étapes antérieures
+        if ! kill -0 $SERVER_PID 2>/dev/null; then
+          echo "❌ CRITICAL: Server was already dead before beginning concurrency tests."; exit 1
+        fi
+
+        echo '{"bench":"concurrency_payload"}' > post_data.json
+
+        echo "🔥 Phase A: Bombarding with 1000 concurrent GET requests (50 parallel)..."
+        ab -n 1000 -c 50 http://localhost:8888/index.html
+
+        echo "🔥 Phase B: Bombarding with 500 concurrent POST requests (25 parallel)..."
+        # Test intensif du nouveau parseur dynamique et de la gestion de mémoire par thread
+        ab -n 500 -c 25 -p post_data.json -T "application/json" http://localhost:8888/api/test
+
+        # Vérification ultime de viabilité du processus (détection des Segfaults causés par des Race Conditions)
+        echo "--------------------------------------------------"
+        if kill -0 $SERVER_PID 2>/dev/null; then
+          echo "✅ PARFAIT: LITH a survécu au bombardement multi-thread sans aucune Race Condition !"
+        else
+          echo "🚨 CRITIQUE: Le moteur a CRASHÉ (Segmentation Fault probable) sous la charge conjointe !"
+          echo "Vérifie l'accès concurrent aux buffers partagés ou aux instances de logger."
+          rm -f post_data.json
+          exit 1
+        fi
+
+        # Nettoyage des artefacts de test locaux
+        rm -f post_data.json
+
+        # Fin globale de la suite d'intégration
+        echo "=================================================="
+        echo " 🎉 All 5 structural integration tests passed successfully!"
         echo "=================================================="
         kill $SERVER_PID
