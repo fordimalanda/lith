@@ -12,18 +12,19 @@ else
     LIBS = 
 endif
 
-SRC = $(wildcard src/*.c)
+# Détection automatique des fichiers sources à la racine et dans src/server/
+SRC = $(wildcard src/*.c) $(wildcard src/server/*.c)
 OBJ = $(SRC:.c=.o)
 
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJ) $(LIBS)
+    $(CC) $(CFLAGS) -o $(TARGET) $(OBJ) $(LIBS)
 
+# Règle de compilation générique pour tous les fichiers .c
 %.o: %.c
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+    $(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-# On retire la commande de création de dossier automatique qui pose problème
-# Créez simplement le dossier 'bin' à la main une seule fois
+# Nettoyage des fichiers objets dans toute l'arborescence src
 clean:
-	rm -f src/*.o $(TARGET)
+    rm -f src/*.o src/server/*.o $(TARGET)
