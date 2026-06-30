@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 typedef struct {
     ClientContext base_ctx;
@@ -69,7 +70,10 @@ void *lith_client_handler(void *arg) {
 
                 int n = recv(ctx->client_socket, full_buffer + total_received, remaining, 0);
                 if (n <= 0) {
-                    break; // Déconnexion ou expiration du timeout réseau (SO_RCVTIMEO)
+                    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                        lith_log(LOG_WARN, "Network receive timeout triggered during POST body streaming");
+                    }
+                    break; // Déconnexion, erreur ou expiration du timeout réseau
                 }
                 total_received += n;
                 already_received_body += n;
@@ -83,8 +87,7 @@ void *lith_client_handler(void *arg) {
 
         // --- AIGUILLAGE DES MÉTHODES HTTP ---
         if (req.method == METHOD_POST) {
-            // Traitement applicatif d'une route API POST pour la v1.0.5
-            // Pour l'instant, on lit le corps reçu et on le renvoie en écho (Echo Server)
+            // Traitement applicatif d'une route API POST (Echo Server)
             lith_log(LOG_INFO, "POST Payload payload size: %ld bytes", req.content_length);
             
             char response_body[512];
@@ -104,7 +107,7 @@ void *lith_client_handler(void *arg) {
             send(ctx->client_socket, response_body, (int)strlen(response_body), 0);
 
         } else if (req.method == METHOD_GET) {
-            // Logique historique inchangée pour le traitement des fichiers statiques
+            // Logique de traitement des fichiers statiques
             if (!is_safe_path(req.path)) {
                 lith_log(LOG_WARN, "Security Alert: Blocked traversal attempt on path: %s", req.path);
                 const char *html = get_error_html(403, "Forbidden", "Access to this resource is strictly prohibited.");
@@ -149,12 +152,22 @@ void *lith_client_handler(void *arg) {
             }
         }
     } else {
-        lith_log(LOG_ERROR, "500 - Internal Server Error or Timeout on network receive");
-        const char *html = get_error_html(500, "Internal Server Error", "The server encountered an unexpected condition or request timeout.");
-        char header[256];
-        sprintf(header, "HTTP/1.1 500 Internal Server Error\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", strlen(html));
-        send(ctx->client_socket, header, (int)strlen(header), 0);
-        send(ctx->client_socket, html, (int)strlen(html), 0);
+        // Interception fine de la cause de la déconnexion / échec de lecture
+        if (total_received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            lith_log(LOG_WARN, "408 - Request Timeout: Client failed to send data within the window");
+            const char *html = get_error_html(408, "Request Timeout", "The server timed out waiting for the request.");
+            char header[256];
+            sprintf(header, "HTTP/1.1 408 Request Timeout\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", strlen(html));
+            send(ctx->client_socket, header, (int)strlen(header), 0);
+            send(ctx->client_socket, html, (int)strlen(html), 0);
+        } else {
+            lith_log(LOG_ERROR, "500 - Internal Server Error on network receive");
+            const char *html = get_error_html(500, "Internal Server Error", "The server encountered an unexpected condition.");
+            char header[256];
+            sprintf(header, "HTTP/1.1 500 Internal Server Error\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", strlen(html));
+            send(ctx->client_socket, header, (int)strlen(header), 0);
+            send(ctx->client_socket, html, (int)strlen(html), 0);
+        }
     }
 
     lith_close_socket(ctx->client_socket);
