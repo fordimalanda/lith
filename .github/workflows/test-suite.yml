@@ -55,7 +55,20 @@ jobs:
         fi
 
         echo "=================================================="
-        echo " TEST 2: Validation HTTP POST (Engine v1.0.5) "
+        echo " 🔄 TEST 1B: HTTP Keep-Alive Connection Re-use "
+        echo "=================================================="
+        # Enchaînement de 3 requêtes consécutives sur la même commande curl
+        CURL_KEEP_LOG=$(curl -v -s http://localhost:8888/index.html http://localhost:8888/index.html http://localhost:8888/index.html 2>&1)
+        
+        if echo "$CURL_KEEP_LOG" | grep -q "Re-using existing connection"; then
+          echo "✅ KEEP-ALIVE PASSED: Curl successfully re-used the same TCP socket!"
+        else
+          echo "❌ KEEP-ALIVE FAULT: LITH closed the socket prematurely between consecutive requests."
+          kill $SERVER_PID; exit 1
+        fi
+
+        echo "=================================================="
+        echo " TEST 2: Validation HTTP POST (Engine v1.0.6) "
         echo "=================================================="
         POST_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -d '{"test":"ci_payload"}' http://localhost:8888/api/test)
         
@@ -73,7 +86,6 @@ jobs:
         echo "=================================================="
         echo " TEST 3: Security - Directory Traversal Barrier "
         echo "=================================================="
-        # L'option --path-as-is force curl à envoyer les '../' sans les résoudre localement.
         SEC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --path-as-is http://localhost:8888/../../etc/passwd)
         if [ "$SEC_STATUS" -eq 400 ] || [ "$SEC_STATUS" -eq 403 ] || [ "$SEC_STATUS" -eq 404 ]; then
           echo "✅ Security Guard Success: Traversal blocked or mitigated with HTTP $SEC_STATUS"
@@ -139,8 +151,6 @@ jobs:
         
         echo "Opening an inactive connection to trigger LITH's 3s timeout..."
         
-        # Le marqueur de fin EOF est maintenant aligné sur l'étape run.
-        # Cela évite de briser la structure YAML du workflow.
         nc -w 5 localhost 8888 << EOF
         POST /api/test HTTP/1.1
         Content-Length: 100
@@ -150,9 +160,6 @@ jobs:
         DURATION=$((END_TIME - START_TIME))
         echo "Connection lasted for: $DURATION seconds"
 
-        # Si le SO_RCVTIMEO (3s) fonctionne, LITH coupe. nc intercepte le FIN/RST 
-        # et s'arrête instantanément (DURATION ~ 3s). 
-        # Si LITH échoue, nc attend son propre timeout -w 5 (DURATION >= 5s).
         if [ "$DURATION" -ge 5 ]; then
           echo "❌ CRITICAL FAULT: LITH kept the socket open too long ($DURATIONs)! Vulnerable to Slowloris."
           kill $SERVER_PID; exit 1
@@ -165,6 +172,6 @@ jobs:
 
         # Fin globale de la suite de tests
         echo "=================================================="
-        echo " 🎉 All 6 advanced industrial tests passed successfully!"
+        echo " 🎉 All 7 advanced industrial tests passed successfully!"
         echo "=================================================="
         kill $SERVER_PID
