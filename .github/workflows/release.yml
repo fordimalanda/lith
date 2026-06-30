@@ -9,6 +9,13 @@ jobs:
   release-assets:
     name: Build and Publish Release Assets
     runs-on: ${{ matrix.os }}
+    
+    # -------------------------------------------------------------
+    # AJOUT CRUCIAL : Donne l'autorisation d'écrire la Release
+    # -------------------------------------------------------------
+    permissions:
+      contents: write
+      
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -50,7 +57,7 @@ jobs:
         mkdir -p bin
         make
 
-    # Extraction dynamique de la version du Tag (ex: v1.0.3)
+    # Extraction dynamique de la version du Tag (ex: v1.0.4)
     - name: Get Version from Tag
       id: get_version
       shell: bash
