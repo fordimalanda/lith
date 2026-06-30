@@ -45,6 +45,8 @@ void *lith_client_handler(void *arg) {
             // --- GESTION DU CORPS DE LA REQUÊTE HTTP POST ---
             if (req.method == METHOD_POST && req.content_length > 0) {
                 long already_received_body = 0;
+                bool post_timeout_triggered = false; // Flag pour intercepter le timeout partiel
+                
                 if (req.body_start) {
                     already_received_body = total_received - (req.body_start - full_buffer);
                 }
@@ -60,12 +62,20 @@ void *lith_client_handler(void *arg) {
                     if (n <= 0) {
                         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
                             lith_log(LOG_WARN, "Network receive timeout triggered during POST body streaming");
+                            post_timeout_triggered = true;
                         }
                         break;
                     }
                     total_received += n;
                     already_received_body += n;
                 }
+                
+                // Sécurité anti-Slowloris : Si le corps a expiré, on coupe court immédiatement
+                if (post_timeout_triggered) {
+                    send_http_error(ctx->client_socket, 408, "Request Timeout", "The server timed out waiting for the full POST body payload.");
+                    break; // Rupture immédiate du grand "while", fermeture directe de la socket
+                }
+                
                 parse_http_request(full_buffer, &req);
             }
 
@@ -73,18 +83,18 @@ void *lith_client_handler(void *arg) {
             handle_http_route(ectx, &req, full_buffer, total_received);
             request_count++;
 
-            // Mise à jour de la condition de boucle basée sur les désirs du client ou les erreurs
+            // Mise à jour de la condition de boucle basée sur les désirs du client
             connection_keep_active = req.keep_alive;
 
         } else {
             // total_received <= 0 : Déconnexion naturelle ou déclenchement du Timeout SO_RCVTIMEO
             if (total_received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
                 if (request_count == 0) {
-                    // C'est un timeout sur la toute première requête (le client s'est connecté mais n'a rien envoyé)
+                    // Timeout sur la toute première requête
                     lith_log(LOG_WARN, "408 - Request Timeout: Client failed to send data within the window");
                     send_http_error(ctx->client_socket, 408, "Request Timeout", "The server timed out waiting for the request.");
                 } else {
-                    // C'est un timeout Keep-Alive sain : la socket était ouverte en attente d'une n-ième requête
+                    // Timeout de fin de session Keep-Alive sain
                     lith_log(LOG_INFO, "Keep-Alive window closed cleanly via network timeout");
                 }
             }
@@ -92,7 +102,7 @@ void *lith_client_handler(void *arg) {
         }
     }
 
-    // Destruction unique des ressources en fin de vie de la connexion TCP persistante
+    // Destruction unique des ressources et fermeture de la ligne TCP
     lith_close_socket(ctx->client_socket);
     free(full_buffer);
     free(ectx);
