@@ -137,23 +137,27 @@ jobs:
         echo "=================================================="
         START_TIME=$(date +%s)
         
-        echo "Simulating a true hung connection (Client stalls for 7 seconds)..."
-        # On injecte un en-tête incomplet et on bloque le client pendant 7 secondes.
-        # L'option -w 5 de nc sert de garde-fou local.
-        (echo -e "POST /api/test HTTP/1.1\r\nContent-Length: 100\r\n"; sleep 7) | nc -w 5 localhost 8888 || true
+        echo "Opening an inactive connection to trigger LITH's 3s timeout..."
+        
+        # nc lit les en-têtes via le heredoc, les pousse sur le socket, puis tombe
+        # en attente d'I/O pure sans interférence de processus tiers.
+        nc -w 5 localhost 8888 << EOF
+        POST /api/test HTTP/1.1
+        Content-Length: 100
+EOF
         
         END_TIME=$(date +%s)
         DURATION=$((END_TIME - START_TIME))
         echo "Connection lasted for: $DURATION seconds"
 
-        # Si LITH a correctement appliqué son SO_RCVTIMEO de 3s, il a coupé le socket.
-        # Netcat s'est arrêté immédiatement. DURATION doit être d'environ 3 secondes.
-        # Si DURATION est >= 5, le serveur a attendu la mort de netcat -> Échec.
+        # Si le SO_RCVTIMEO (3s) fonctionne, LITH coupe. nc intercepte le FIN/RST 
+        # et s'arrête instantanément (DURATION ~ 3s). 
+        # Si LITH échoue, nc attend son propre timeout -w 5 (DURATION >= 5s).
         if [ "$DURATION" -ge 5 ]; then
           echo "❌ CRITICAL FAULT: LITH kept the socket open too long ($DURATIONs)! Vulnerable to Slowloris."
           kill $SERVER_PID; exit 1
         else
-          echo "✅ PASSED: Socket timeout successfully triggered. Connection dropped cleanly in $DURATION seconds."
+          echo "✅ PASSED: Socket timeout successfully triggered by LITH in $DURATION seconds."
         fi
 
         echo "Checking if server survived and remains operational..."
