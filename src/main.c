@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "server.h"
+#include "config.h"
 #include "logger.h"
 #include <signal.h>
 
