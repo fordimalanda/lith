@@ -1,5 +1,14 @@
 #include <windows.h>
 
+// ============================================================================
+//  ICÔNE DE L'APPLICATION
+//  L'identifiant 1 (ou MAINICON) indique à Windows que c'est l'icône principale
+// ============================================================================
+1 ICON "app_icon.ico"
+
+// ============================================================================
+//  INFORMATIONS DE VERSION ET CONFIGURATION
+// ============================================================================
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     1,0,7,0
 PRODUCTVERSION  1,0,7,0
