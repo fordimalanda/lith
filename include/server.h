@@ -22,6 +22,11 @@
     typedef int socket_t;
 #endif
 
+/* API de contrôle d'infrastructure - Mode Démon Linux (v1.0.8) */
+#ifndef _WIN32
+int lith_daemonize(void);
+#endif
+
 #include <pthread.h>
 #include <stdbool.h>
 #include "common.h" // Contient ServerConfig

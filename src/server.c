@@ -4,6 +4,8 @@
  */
 
 #include "server.h"
+#include "config.h"
+#include "common.h"
 #include "server_utils.h"
 #include "logger.h"
 #include <stdio.h>
