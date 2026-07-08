@@ -10,6 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Référence vers le pool global initialisé dans le main.c
+extern ThreadPool_t global_pool;
+
+/**
+ * Initialise la couche socket basse couche du serveur (Windows/Linux)
+ * Retourne le descripteur de fichier de la socket serveur ou -1 en cas d'erreur
+ */
 int lith_init_server(const ServerConfig *config) {
 #ifdef _WIN32
     WSADATA wsa;
@@ -57,7 +64,15 @@ int lith_init_server(const ServerConfig *config) {
     return (int)server_fd;
 }
 
+/**
+ * Boucle d'écoute principale (Accept-Loop)
+ * Intercepte les sockets entrantes et les délègue immédiatement au Thread Pool
+ */
 void lith_start_server(int server_fd, const ServerConfig *config) {
+    (void)config; // Évite le warning 'unused parameter' puisque le dossier public est géré par le pool
+    
+    lith_log(LOG_INFO, "LITH core engine event loop started. Waiting for connections...");
+
     while (true) {
         struct sockaddr_in addr;
 #ifdef _WIN32
@@ -66,36 +81,30 @@ void lith_start_server(int server_fd, const ServerConfig *config) {
         socklen_t len = sizeof(addr);
 #endif
         
-        ExpandedClientContext *ectx = malloc(sizeof(ExpandedClientContext));
-        if (!ectx) continue;
+        // 1. Blocage en attente d'une connexion cliente
+        socket_t client_socket = accept((socket_t)server_fd, (struct sockaddr *)&addr, &len);
 
-        strncpy(ectx->public_dir, config->public_dir, sizeof(ectx->public_dir) - 1);
-        ectx->public_dir[sizeof(ectx->public_dir) - 1] = '\0';
-
-        ectx->base_ctx.client_socket = accept((socket_t)server_fd, (struct sockaddr *)&addr, &len);
-
-        if (ectx->base_ctx.client_socket == (socket_t)-1) {
-            free(ectx);
+        if (client_socket == (socket_t)-1) {
+            // Si le serveur est arrêté proprement, accept() peut retourner une erreur légitime
+            if (global_pool.shutdown) {
+                break;
+            }
             continue;
         }
 
-        // --- CONFIGURATION DU TIMEOUT SUR LE SOCKET CLIENT (Anti-Slowloris) ---
+        // 2. Configuration du timeout SO_RCVTIMEO (Anti-Slowloris & Keep-Alive Window)
 #ifdef _WIN32
-        DWORD timeout = 3000;
-        setsockopt(ectx->base_ctx.client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+        DWORD timeout = 3000; // 3 secondes en millisecondes
+        setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
 #else
         struct timeval tv;
-        tv.tv_sec = 3;
+        tv.tv_sec = 3;        // 3 secondes
         tv.tv_usec = 0;
-        setsockopt(ectx->base_ctx.client_socket, SOL_SOCKET, SO_RCVTIMEO, (const struct timeval *)&tv, sizeof(tv));
+        setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const struct timeval *)&tv, sizeof(tv));
 #endif
 
-        pthread_t tid;
-        if (pthread_create(&tid, NULL, lith_client_handler, ectx) == 0) {
-            pthread_detach(tid);
-        } else {
-            lith_close_socket(ectx->base_ctx.client_socket);
-            free(ectx);
-        }
+        // 3. MAINTENANT AVEC v1.0.7 : Injection ultra-rapide dans la file d'attente concurrente
+        // Le thread principal se libère instantanément sans instancier ou détruire de thread.
+        thread_pool_push(&global_pool, client_socket);
     }
 }
