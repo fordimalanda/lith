@@ -26,7 +26,6 @@
 #include <stdbool.h>
 #include "common.h" // Contient ServerConfig
 
-#define LITH_VERSION "1.0.7"
 #define DEFAULT_PORT 8090
 #define BACKLOG 10
 #define BUFFER_SIZE 4096
