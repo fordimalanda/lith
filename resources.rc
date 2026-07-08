@@ -10,8 +10,8 @@
 //  INFORMATIONS DE VERSION ET CONFIGURATION
 // ============================================================================
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,0,7,0
-PRODUCTVERSION  1,0,7,0
+FILEVERSION     1,0,8,0
+PRODUCTVERSION  1,0,8,0
 FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
 FILEFLAGS       0x0L
 FILEOS          VOS__WINDOWS32
@@ -24,12 +24,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "FomaDev (Fordima Inc.)"
             VALUE "FileDescription",  "LITH Engine CLI"
-            VALUE "FileVersion",      "1.0.7"
+            VALUE "FileVersion",      "1.0.8"
             VALUE "InternalName",     "lith"
             VALUE "LegalCopyright",   "Copyright (c) 2026 FomaDev, a Fordima Inc. company."
             VALUE "OriginalFilename", "lith.exe"
             VALUE "ProductName",      "LITH Engine"
-            VALUE "ProductVersion",   "1.0.7"
+            VALUE "ProductVersion",   "1.0.8"
         END
     END
     BLOCK "VarFileInfo"

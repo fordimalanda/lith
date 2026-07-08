@@ -4,7 +4,8 @@ LITH is a minimalist, high-performance, multi-threaded HTTP engine implemented i
 
 ## Key Features
 
-- **Architectural Thread Pool (v1.0.7)**: Instantiates a fixed set of permanent, isolated worker threads upon boot. Eliminates runtime thread spawning/destruction overhead by utilizing a synchronized FIFO task queue managed via POSIX condition variables (`pthread_cond_t`) and mutexes (`pthread_mutex_t`).
+- **Architectural Thread Pool**: Instantiates a fixed set of permanent, isolated worker threads upon boot. Eliminates runtime thread spawning/destruction overhead by utilizing a synchronized FIFO task queue managed via POSIX condition variables (`pthread_cond_t`) and mutexes (`pthread_mutex_t`).
+- **Native Background Daemon Mode (v1.0.8 Linux Only)**: Detaches the server process from the controlling terminal using a strict dual-`fork()` POSIX sequence. Isolates the process session (`setsid()`), resets the file creation mask (`umask(0)`), and seamlessly redirects standard output and error streams to a continuous localized `lith.log` file.
 - **High-Throughput Main Loop**: Features an optimized accept-loop that offloads incoming sockets instantly to the shared worker pool, freeing the core network thread to handle maximum incoming connection density per second.
 - **HTTP Keep-Alive Persistent Connections**: Keeps client sockets active for consecutive resource transfers within a secure window. Features automated connection recycling to maximize performance and minimize TCP handshake overhead.
 - **Anti-Slowloris Security Guard**: Arms incoming sockets with a rigid 3-second network receive timeout (`SO_RCVTIMEO`) directly on the accept layer, ensuring resilient defense against slow-connection or resource-exhaustion vector attacks.
@@ -21,7 +22,7 @@ LITH is a minimalist, high-performance, multi-threaded HTTP engine implemented i
 
 ### 1. Build Compilation
 
-LITH ships with a highly robust, cross-platform `Makefile` optimized for GNU Make. It automatically handles header dependency generation (`-MMD -MP`) and natively adapts to both Linux/macOS shells and Windows environments.
+LITH ships with a highly robust, cross-platform `Makefile` optimized for GNU Make. It automatically handles header dependency generation (`-MMD -MP`) and natively adapts to both Linux/macOS shells and Windows environments (such as `w64devkit`).
 
 To compile the project from scratch:
 
@@ -46,15 +47,20 @@ PUBLIC_DIR=public
 
 Place your web assets inside the configured `public/` directory(e.g., `public/index.html`)..
 
-LITH features a modern, explicit CLI command architecture. To execute the engine, you must use the start command routing path:
+LITH features a modern, explicit CLI command architecture. To execute the engine, you must use the `start` command routing path:
 
 ```bash
-# Launch the engine using defaults or configuration settings
+# Launch the engine in the foreground using standard configuration settings
 bin/lith start
 
 # Override the configured port dynamically via runtime arguments
 bin/lith start 8080
+
+# Launch as a background daemon process detached from the terminal (Linux only)
+bin/lith start 8080 --daemon
 ```
+
+**Note on Windows Portability**: If the `--daemon` or `-d` flag is invoked under Windows, LITH will catch the argument, log an informative warning indicating that background daemons require a UNIX environment, and gracefully fall back to foreground mode to maintain continuous execution.
 
 To display context help or print the build version string:
 
@@ -71,25 +77,28 @@ bin/lith --version
 .
 ├── bin/                 # Output directory for compiled executable binaries
 ├── include/             # Header files, macros, and cross-platform abstractions
-│   ├── common.h         # Centralized data structures, configuration state, and global version definitions
+│   ├── common.h         # Centralized data structures and configuration state variables
+│   ├── config.h         # Runtime environment initialization prototypes (lith.conf parser)
 │   ├── http_parser.h    # HTTP Request structures, MIME mapping, and error pages
 │   ├── http_router.h    # Application routing and static file rendering logic
 │   ├── logger.h         # Centralized thread-safe logging interface
 │   ├── server.h         # Thread pool definitions, worker prototypes, and socket contexts
-│   └── server_utils.h   # Multiplatform OS socket wrappers (lith_close_socket)
+│   └── server_utils.h   # Multiplatform OS socket wrappers and safety tools
 ├── public/              # Static web root (HTML, CSS, JS, Assets)
 ├── src/
 │   ├── server/          # Configuration parser and server utility modules
 │   │   ├── config.c     # Runtime initialization logic (lith.conf reader)
 │   │   └── utils.c      # Multiplatform OS abstractions and file system safety
+│   ├── daemon.c         # UNIX-exclusive dual-fork background process daemonizer (v1.0.8)
 │   ├── http_parser.c    # Case-insensitive protocol parser
 │   ├── http_router.c    # Request handler, route dispatcher, and security validation
 │   ├── logger.c         # Formatted terminal output subsystem
-│   ├── main.c           # Application bootstrap, signal trapping, and CLI routing argument handler
+│   ├── main.c           # Application bootstrap, CLI routing argument handler, and signal trapping
 │   ├── server.c         # TCP socket initialization, reuse options, and accept-push loop
 │   └── server_worker.c  # Persistent pool worker thread loop, queue management, and request routing
 ├── lith.conf            # Runtime configuration file
-└── Makefile             # Universal, silent multi-platform automated build script
+├── resources.rc         # Windows application meta-properties and icon descriptor
+└── Makefile             # Universal, multi-platform automated build pipeline
 ```
 
 ---
@@ -97,7 +106,7 @@ bin/lith --version
 ## Technical Specifications
 | Parameter | Default Value | Description |
 |-----------|---------------|-------------|
-| `LITH_VERSION` | `1.0.7` | Current stable release version |
+| `LITH_VERSION` | `1.0.8` | Current stable release version |
 | `BUFFER_SIZE` | `4096 bytes` | Standard socket read/write block buffer size |
 | Maximum Buffer | `16 KB` | Maximum cumulative buffer space for HTTP headers and POST bodies |
 | `BACKLOG` | `10` | Maximum number of pending client connections in the listen queue |
