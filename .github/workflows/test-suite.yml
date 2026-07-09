@@ -39,12 +39,31 @@ jobs:
     - name: Execute Network Test Suite
       shell: bash
       run: |
-        # 1. Démarrage du serveur avec la commande explicite
-        ./bin/lith start > server_output.log 2>&1 &
+        echo "=================================================="
+        echo " 🛰️  DIAGNOSTIC : CLI SMOKE TEST "
+        echo "=================================================="
+        ./bin/lith --help || ./bin/lith -h || echo "No explicit help handler implemented."
+        
+        # 1. Démarrage du serveur LITH (Correction : Retrait du flag 'start' parasite)
+        ./bin/lith > server_output.log 2>&1 &
         SERVER_PID=$!
         
         # Laisser le temps au socket et au Thread Pool de s'initialiser
-        sleep 1
+        sleep 2
+        
+        echo "=================================================="
+        echo " ⚙️  DIAGNOSTIC PROCESSUS & SOCKET "
+        echo "=================================================="
+        if kill -0 $SERVER_PID 2>/dev/null; then
+          echo "✅ LITH process successfully spawned and running with PID: $SERVER_PID"
+          echo "Active sockets listening on port 8888 :"
+          ss -tlnp | grep 8888 || netstat -an | grep 8888 || echo "⚠️ Warning: No socket binding detected on port 8888!"
+        else
+          echo "❌ CRITICAL: LITH crashed or returned immediately upon entry!"
+          echo "Process status output :"
+          cat server_output.log
+          exit 1
+        fi
         
         echo "=================================================="
         echo " TEST 1: Validation HTTP GET (Static Files) "
@@ -60,7 +79,7 @@ jobs:
           if [ -f server_output.log ]; then
             cat server_output.log
           else
-            echo "No server_output.log file was generated."
+            echo "No server_output.log file was found."
           fi
           echo "=================================================="
           kill -9 $SERVER_PID 2>/dev/null || true
@@ -175,7 +194,7 @@ jobs:
         echo "Launching LITH in native background Daemon mode..."
         
         # Lancement explicite avec le flag --daemon
-        ./bin/lith start --daemon
+        ./bin/lith --daemon
         
         # Laisser 1 seconde au double-fork pour stabiliser le démon détaché
         sleep 1
@@ -184,7 +203,7 @@ jobs:
         if pgrep -x "lith" > /dev/null; then
           echo "✅ DAEMON PASSED: LITH running successfully in background."
           
-          # Validation réseau : Peu importe si c'est 200 ou 404, le serveur écoute et répond !
+          # Validation réseau
           DAEMON_STATUS=$(curl -s --http1.0 -o /dev/null -w "%{http_code}" http://localhost:8888/)
           if [ "$DAEMON_STATUS" -eq 200 ] || [ "$DAEMON_STATUS" -eq 404 ]; then
             echo "✅ DAEMON NET PASSED: Background process active and responding on network socket (Status: $DAEMON_STATUS)"
