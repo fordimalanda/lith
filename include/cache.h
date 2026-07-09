@@ -6,6 +6,15 @@
 #ifndef LITH_CACHE_H
 #define LITH_CACHE_H
 
+/* Macros de contrôle pour exposer les extensions POSIX (pthread_rwlock_t) sous -std=c11 Linux */
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 600
+#endif
+
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+
 #include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
