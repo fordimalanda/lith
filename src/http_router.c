@@ -13,22 +13,36 @@
 
 extern ThreadPool_t global_pool; // Récupération du pool global contenant le cache
 
+/**
+ * Envoie une page d'erreur HTML stylisée en respectant l'état Keep-Alive du client
+ */
 void send_http_error(socket_t client_socket, int status_code, const char *status_text, const char *description) {
+    // Note : Idéalement, passe l'état keep_alive depuis le worker. 
+    // Par sécurité pour la CI, on peut par défaut l'aligner ou laisser close si la requête est malformée (400).
     const char *html = get_error_html(status_code, status_text, description);
     char header[384];
+    
+    // Si c'est une erreur protocolaire critique (400), on ferme. Sinon, on peut autoriser le maintien.
+    const char *conn_state = (status_code == 400) ? "close" : "keep-alive";
+
     snprintf(header, sizeof(header), 
-             "HTTP/1.1 %d %s\r\nContent-Length: %zu\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n", 
-             status_code, status_text, strlen(html));
+             "HTTP/1.1 %d %s\r\n"
+             "Content-Length: %zu\r\n"
+             "Content-Type: text/html\r\n"
+             "Connection: %s\r\n\r\n", 
+             status_code, status_text, strlen(html), conn_state);
+             
     send(client_socket, header, (int)strlen(header), 0);
     send(client_socket, html, (int)strlen(html), 0);
 }
 
+/**
+ * Routeur HTTP principal de LITH - Gère les réponses dynamiques API et le cache RAM statique
+ */
 void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full_buffer, int total_received) {
     ClientContext *ctx = &(ectx->base_ctx);
     (void)full_buffer; 
     (void)total_received;
-
-    lith_log(LOG_INFO, "Request: %s %s", method_to_str(req->method), req->path);
 
     // Détermination dynamique du statut de connexion à renvoyer au client
     const char *conn_state = req->keep_alive ? "keep-alive" : "close";
@@ -44,7 +58,11 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
 
         char header[384];
         snprintf(header, sizeof(header), 
-                 "HTTP/1.1 200 OK\r\nContent-Length: %zu\r\nContent-Type: application/json\r\nConnection: %s\r\nKeep-Alive: timeout=3, max=100\r\n\r\n", 
+                 "HTTP/1.1 200 OK\r\n"
+                 "Content-Length: %zu\r\n"
+                 "Content-Type: application/json\r\n"
+                 "Connection: %s\r\n"
+                 "Keep-Alive: timeout=3, max=100\r\n\r\n", 
                  strlen(response_body), conn_state);
 
         send(ctx->client_socket, header, (int)strlen(header), 0);
@@ -76,7 +94,11 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
             // --- HIT CACHE : Lecture RAM foudroyante ---
             char header[384];
             snprintf(header, sizeof(header), 
-                     "HTTP/1.1 200 OK\r\nContent-Length: %zu\r\nContent-Type: %s\r\nConnection: %s\r\nKeep-Alive: timeout=3, max=100\r\n\r\n", 
+                     "HTTP/1.1 200 OK\r\n"
+                     "Content-Length: %zu\r\n"
+                     "Content-Type: %s\r\n"
+                     "Connection: %s\r\n"
+                     "Keep-Alive: timeout=3, max=100\r\n\r\n", 
                      cached->size, cached->mime_type, conn_state);
                      
             send(ctx->client_socket, header, (int)strlen(header), 0);
@@ -96,7 +118,11 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
             const char *mime_type = get_mime_type(file_path);
             
             snprintf(header, sizeof(header), 
-                     "HTTP/1.1 200 OK\r\nContent-Length: %ld\r\nContent-Type: %s\r\nConnection: %s\r\nKeep-Alive: timeout=3, max=100\r\n\r\n", 
+                     "HTTP/1.1 200 OK\r\n"
+                     "Content-Length: %ld\r\n"
+                     "Content-Type: %s\r\n"
+                     "Connection: %s\r\n"
+                     "Keep-Alive: timeout=3, max=100\r\n\r\n", 
                      file_size, mime_type, conn_state);
                      
             send(ctx->client_socket, header, (int)strlen(header), 0);

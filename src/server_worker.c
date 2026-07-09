@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 
 /**
  * Initialise le pool de workers et pré-charge le cache statique RAM (v1.0.9)
@@ -135,6 +137,14 @@ void *lith_client_handler(void *arg) {
         socket_t client_socket = node->socket;
         free(node);
 
+        // [v1.0.9] Configuration d'un Timeout de 3 secondes pour préserver la disponibilité du pool
+        struct timeval timeout;
+        timeout.tv_sec = 3;
+        timeout.tv_usec = 0;
+        if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+            lith_log(LOG_ERROR, "Failed to apply SO_RCVTIMEO context on client socket.");
+        }
+
         // Construction du contexte étendu pour le worker
         ExpandedClientContext ectx;
         ectx.base_ctx.client_socket = client_socket;
@@ -146,23 +156,39 @@ void *lith_client_handler(void *arg) {
         HttpRequest *req = malloc(sizeof(HttpRequest));
         if (req) {
             char buffer[BUFFER_SIZE];
-            int received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-            
-            if (received > 0) {
-                buffer[received] = '\0';
+            bool keep_running = true;
+
+            // [v1.0.9] Boucle d'exécution HTTP/1.1 Keep-Alive
+            while (keep_running) {
+                int received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
                 
-                // CORRIGÉ : On vérifie explicitement si le parser renvoie 0 (succès)
-                if (parse_http_request(buffer, req) == 0) {
-                    // Routage vers le cache RAM ou fallback disque
-                    handle_http_route(&ectx, req, buffer, received);
+                if (received > 0) {
+                    buffer[received] = '\0';
+                    
+                    // Passage du buffer au parser natif de LITH
+                    if (parse_http_request(buffer, req) == 0) {
+                        lith_log(LOG_INFO, "Request: %s %s", method_to_str(req->method), req->path);
+                        
+                        // Routage vers le cache RAM ou fallback disque
+                        handle_http_route(&ectx, req, buffer, received);
+                        
+                        // Si le protocole demande une fermeture immédiate, on coupe la boucle de persistance
+                        if (!req->keep_alive) {
+                            keep_running = false;
+                        }
+                    } else {
+                        send_http_error(client_socket, 400, "Bad Request", "Malformed HTTP request protocol.");
+                        keep_running = false;
+                    }
                 } else {
-                    send_http_error(client_socket, 400, "Bad Request", "Malformed HTTP request protocol.");
+                    // Fin de flux (FIN envoyé par le client) ou interruption par Timeout (EAGAIN/EWOULDBLOCK)
+                    keep_running = false;
                 }
             }
             free(req);
         }
 
-        // Fermeture obligatoire pour sceller le socket proprement
+        // Fermeture obligatoire pour libérer et recycler le descripteur de fichier (FD)
         lith_close_socket(client_socket);
     }
 
