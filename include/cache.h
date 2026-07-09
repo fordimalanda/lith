@@ -18,6 +18,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <time.h> // <--- AJOUT pour time_t
 
 #define MAX_CACHE_ENTRIES 32
 #define MAX_CACHE_FILE_SIZE (1024 * 1024) // 1 Mo max par fichier pour protéger la RAM
@@ -27,6 +28,7 @@ typedef struct {
     char *content;           // Contenu du fichier alloué dynamiquement dans la RAM
     size_t size;             // Taille du fichier en octets
     char mime_type[64];      // MIME-type pré-calculé
+    time_t last_modified;    // <--- AJOUT : Heure de dernière modification disque
     bool is_active;
 } CacheEntry;
 
@@ -40,6 +42,7 @@ typedef struct {
 void lith_cache_init(LithCache *cache);
 int lith_cache_add(LithCache *cache, const char *filepath, const char *mime_type);
 CacheEntry *lith_cache_lookup(LithCache *cache, const char *filepath);
+bool lith_cache_hot_reload(CacheEntry *entry); // <--- AJOUT de l'API de rechargement
 void lith_cache_destroy(LithCache *cache);
 
 #endif // LITH_CACHE_H

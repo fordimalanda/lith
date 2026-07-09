@@ -23,6 +23,7 @@
 typedef struct {
     int port;
     char public_dir[256];
+    int use_cache; // 0 = Off (Développement), 1 = Hot-Reload (Production)
 } ServerConfig;
 
 #define CHECK_ERROR(condition, msg) \

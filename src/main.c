@@ -15,7 +15,8 @@
 #include <stdbool.h>
 
 ThreadPool_t global_pool;
-int global_server_fd = -1; // Référence globale pour libérer accept() lors du Ctrl+C
+ServerConfig global_config; // Variable globale partagée pour exposer use_cache au routeur
+int global_server_fd = -1;  // Référence globale pour libérer accept() lors du Ctrl+C
 
 void handle_sigint(int sig) {
     (void)sig;
@@ -74,9 +75,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (strcmp(argv[1], "start") == 0) {
-        ServerConfig config;
         // 1. Lecture impérative de la config avant de faire chdir("/") dans la démonisation
-        load_config("lith.conf", &config);
+        load_config("lith.conf", &global_config);
 
         int port_override = 0;
         bool use_daemon = false;
@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
 
         if (port_override > 0) {
             lith_log(LOG_INFO, "CLI Argument detected: Overriding port to %d", port_override);
-            config.port = port_override;
+            global_config.port = port_override;
         }
 
         // --- ENCLENCHEMENT DU MODE DÉMON LINUX v1.0.8 ---
@@ -116,9 +116,9 @@ int main(int argc, char *argv[]) {
         printf("   Status: Initializing Architecture...\n");
         printf("----------------------------------------\n");
 
-        thread_pool_init(&global_pool, 8, config.public_dir);
+        thread_pool_init(&global_pool, 8, global_config.public_dir);
 
-        int server_fd = lith_init_server(&config);
+        int server_fd = lith_init_server(&global_config);
         if (server_fd < 0) {
             lith_log(LOG_ERROR, "Critical: Failed to initialize network socket layer");
             thread_pool_shutdown(&global_pool);
@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
 
         global_server_fd = server_fd; // Armement de la référence globale pour le signal SIGINT
 
-        lith_start_server(server_fd, &config);
+        lith_start_server(server_fd, &global_config);
         return 0;
     }
 
