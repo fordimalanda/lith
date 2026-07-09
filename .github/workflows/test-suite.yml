@@ -44,8 +44,11 @@ jobs:
         echo "=================================================="
         ./bin/lith --help || ./bin/lith -h || echo "No explicit help handler implemented."
         
-        # 1. Démarrage du serveur LITH (Correction : Retrait du flag 'start' parasite)
-        ./bin/lith > server_output.log 2>&1 &
+        echo "=================================================="
+        echo " ⚙️  DÉMARRAGE DU MOTEUR (SIGNATURE SYNTAXIQUE VALIDE) "
+        echo "=================================================="
+        # Lancement conforme aux spécifications de ta CLI v1.0.8 avec port explicite
+        ./bin/lith start 8888 > server_output.log 2>&1 &
         SERVER_PID=$!
         
         # Laisser le temps au socket et au Thread Pool de s'initialiser
@@ -187,14 +190,15 @@ jobs:
 
         # Arrêt du serveur de premier plan pour préparer le test du Démon
         kill -9 $SERVER_PID
+        sleep 1
 
         echo "=================================================="
         echo " 😈 TEST 7: Daemon Mode Execution & Detachment "
         echo "=================================================="
         echo "Launching LITH in native background Daemon mode..."
         
-        # Lancement explicite avec le flag --daemon
-        ./bin/lith --daemon
+        # Correction syntaxique : Application stricte du schéma 'start [port] --daemon'
+        ./bin/lith start 8888 --daemon
         
         # Laisser 1 seconde au double-fork pour stabiliser le démon détaché
         sleep 1
