@@ -151,8 +151,8 @@ void *lith_client_handler(void *arg) {
             if (received > 0) {
                 buffer[received] = '\0';
                 
-                // On passe le buffer au parser HTTP natif de LITH
-                if (parse_http_request(buffer, req)) {
+                // CORRIGÉ : On vérifie explicitement si le parser renvoie 0 (succès)
+                if (parse_http_request(buffer, req) == 0) {
                     // Routage vers le cache RAM ou fallback disque
                     handle_http_route(&ectx, req, buffer, received);
                 } else {

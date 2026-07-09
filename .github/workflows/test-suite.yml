@@ -26,11 +26,9 @@ jobs:
         mkdir -p bin public
         echo "<h1>LITH Functional Test Target</h1>" > public/index.html
         
-        # Changement de stratégie : Utilisation d'un port utilisateur isolé (8050) pour éviter les collisions CI
+        # Configuration sur un port isolé hors interférences CI
         echo "PORT=8050" > lith.conf
         echo "PUBLIC_DIR=public" >> lith.conf
-        
-        # Sécurité contextuelle
         cp lith.conf bin/lith.conf
 
     - name: Build LITH Engine
@@ -45,15 +43,24 @@ jobs:
         ./bin/lith --help || ./bin/lith -h || echo "No explicit help handler implemented."
         
         echo "=================================================="
-        echo " ⚙️  DÉMARRAGE DU MOTEUR SUR PORT ISOLÉ (8050) "
+        echo " ⚙️  DÉMARRAGE DU MOTEUR AVEC LOGS DÉCOUPLES "
         echo "=================================================="
-        # Lancement avec bypass des buffers pour obtenir les logs en temps réel
         stdbuf -oL -eL ./bin/lith start 8050 > server_output.log 2>&1 &
         SERVER_PID=$!
         
-        # Laisser le temps au socket et au Thread Pool de s'initialiser
-        sleep 2
-        
+        echo "=================================================="
+        echo " ⏳ BOOT-STRAPPING & ACTIVE WAIT POLLING (127.0.0.1) "
+        echo "=================================================="
+        # Boucle d'attente active pour s'assurer que le pool et le socket acceptent le trafic
+        for i in {1..10}; do
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: localhost" http://127.0.0.1:8050/ || true)
+          if [ "$STATUS" != "000" ]; then
+            echo "-> Engine status reached: HTTP $STATUS after $i second(s)."
+            break
+          fi
+          sleep 1
+        done
+
         echo "=================================================="
         echo " ⚙️  DIAGNOSTIC PROCESSUS & SOCKET "
         echo "=================================================="
@@ -63,28 +70,22 @@ jobs:
           ss -tlnp | grep 8050 || netstat -an | grep 8050 || echo "⚠️ Warning: No socket binding detected on port 8050!"
         else
           echo "❌ CRITICAL: LITH crashed or returned immediately upon entry!"
-          echo "Process status output :"
-          cat server_output.log
-          exit 1
+          cat server_output.log; exit 1
         fi
         
         echo "=================================================="
         echo " TEST 1: Validation HTTP GET (Static Files) "
         echo "=================================================="
-        GET_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: localhost" http://localhost:8050/)
+        # Collecte du code HTTP en forçant l'adresse IP brute
+        GET_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: localhost" http://127.0.0.1:8050/)
         if [ "$GET_STATUS" -eq 200 ]; then
           echo "✅ GET Success: Server responded with HTTP 200"
         else
           echo "❌ GET Failure: Expected 200, got $GET_STATUS"
           echo "=================================================="
-          echo " 📋 STACK TRACE & SERVER LOGS OUTPUT "
+          echo " 📋 SERVER LOGS OUTPUT "
           echo "=================================================="
-          if [ -f server_output.log ]; then
-            cat server_output.log
-          else
-            echo "No server_output.log file was found."
-          fi
-          echo "=================================================="
+          cat server_output.log 2>/dev/null || echo "No server_output.log found."
           kill -9 $SERVER_PID 2>/dev/null || true
           exit 1
         fi
@@ -92,7 +93,7 @@ jobs:
         echo "=================================================="
         echo " 🔄 TEST 1B: HTTP Keep-Alive Connection Re-use "
         echo "=================================================="
-        CURL_KEEP_LOG=$(curl -v -s -H "Host: localhost" http://localhost:8050/index.html http://localhost:8050/index.html http://localhost:8050/index.html 2>&1)
+        CURL_KEEP_LOG=$(curl -v -s -H "Host: localhost" http://127.0.0.1:8050/index.html http://127.0.0.1:8050/index.html http://127.0.0.1:8050/index.html 2>&1)
         if echo "$CURL_KEEP_LOG" | grep -q "Re-using existing connection"; then
           echo "✅ KEEP-ALIVE PASSED: Curl successfully re-used TCP socket!"
         else
@@ -103,7 +104,7 @@ jobs:
         echo "=================================================="
         echo " TEST 2: Validation HTTP POST "
         echo "=================================================="
-        POST_RESPONSE=$(curl -s -X POST -H "Host: localhost" -H "Content-Type: application/json" -d '{"test":"ci_payload"}' http://localhost:8050/api/test)
+        POST_RESPONSE=$(curl -s -X POST -H "Host: localhost" -H "Content-Type: application/json" -d '{"test":"ci_payload"}' http://127.0.0.1:8050/api/test)
         STATUS_JSON=$(echo "$POST_RESPONSE" | jq -r '.status' 2>/dev/null)
         BYTES_JSON=$(echo "$POST_RESPONSE" | jq -r '.bytes_processed' 2>/dev/null)
         
@@ -117,7 +118,7 @@ jobs:
         echo "=================================================="
         echo " TEST 3: Security - Directory Traversal Barrier "
         echo "=================================================="
-        SEC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --path-as-is -H "Host: localhost" http://localhost:8050/../../etc/passwd)
+        SEC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --path-as-is -H "Host: localhost" http://127.0.0.1:8050/../../etc/passwd)
         if [ "$SEC_STATUS" -eq 400 ] || [ "$SEC_STATUS" -eq 403 ] || [ "$SEC_STATUS" -eq 404 ]; then
           echo "✅ Security Guard Success: Traversal blocked with HTTP $SEC_STATUS"
         else
@@ -131,14 +132,12 @@ jobs:
         INITIAL_FD_COUNT=$(ls /proc/$SERVER_PID/fd | wc -l)
         echo "Initial open File Descriptors: $INITIAL_FD_COUNT"
         
-        echo "Bombarding server with rapid sequential requests..."
         for i in {1..15}; do
-          curl -s -H "Host: localhost" -o /dev/null http://localhost:8050/index.html
-          curl -s -H "Host: localhost" -o /dev/null -X POST -H "Content-Type: application/json" -d '{"stress":"test"}' http://localhost:8050/api/test
+          curl -s -H "Host: localhost" -o /dev/null http://127.0.0.1:8050/index.html
+          curl -s -H "Host: localhost" -o /dev/null -X POST -H "Content-Type: application/json" -d '{"stress":"test"}' http://127.0.0.1:8050/api/test
         done
         
         sleep 1
-        
         FINAL_FD_COUNT=$(ls /proc/$SERVER_PID/fd | wc -l)
         echo "Final open File Descriptors: $FINAL_FD_COUNT"
         
@@ -158,8 +157,8 @@ jobs:
         fi
 
         echo '{"bench":"concurrency_payload"}' > post_data.json
-        ab -q -k -n 50 -c 5 http://localhost:8050/index.html
-        ab -q -k -n 30 -c 5 -p post_data.json -T "application/json" http://localhost:8050/api/test
+        ab -q -k -n 50 -c 5 http://127.0.0.1:8050/index.html
+        ab -q -k -n 30 -c 5 -p post_data.json -T "application/json" http://127.0.0.1:8050/api/test
         rm -f post_data.json
 
         if kill -0 $SERVER_PID 2>/dev/null; then
@@ -174,8 +173,7 @@ jobs:
         echo "=================================================="
         START_TIME=$(date +%s)
         
-        echo "Opening an inactive connection to trigger LITH's 3s timeout..."
-        (echo -ne "POST /api/test HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n"; sleep 4) | nc -w 5 localhost 8050
+        (echo -ne "POST /api/test HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n"; sleep 4) | nc -w 5 127.0.0.1 8050
         
         END_TIME=$(date +%s)
         DURATION=$((END_TIME - START_TIME))
@@ -188,24 +186,22 @@ jobs:
           echo "✅ PASSED: Socket timeout successfully triggered in $DURATION seconds."
         fi
 
-        # Libération du port pour préparer le test démonisé
+        # Reset d'environnement avant le mode Démon
         kill -9 $SERVER_PID
         sleep 1
 
         echo "=================================================="
         echo " 😈 TEST 7: Daemon Mode Execution & Detachment "
         echo "=================================================="
-        echo "Launching LITH in native background Daemon mode..."
-        
         ./bin/lith start 8050 --daemon
         sleep 1
         
         if pgrep -x "lith" > /dev/null; then
           echo "✅ DAEMON PASSED: LITH running successfully in background."
           
-          DAEMON_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: localhost" http://localhost:8050/)
+          DAEMON_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: localhost" http://127.0.0.1:8050/)
           if [ "$DAEMON_STATUS" -eq 200 ] || [ "$DAEMON_STATUS" -eq 404 ]; then
-            echo "✅ DAEMON NET PASSED: Background process active and responding on network socket (Status: $DAEMON_STATUS)"
+            echo "✅ DAEMON NET PASSED: Background process active and responding (Status: $DAEMON_STATUS)"
           else
             echo "❌ DAEMON NET FAULT: Background process alive but socket unreachable (Status: $DAEMON_STATUS)"
             pkill -9 -x lith; exit 1
@@ -217,7 +213,6 @@ jobs:
           exit 1
         fi
 
-        # Fin globale
         echo "=================================================="
         echo " 🎉 All advanced industrial tests passed successfully!"
         echo "=================================================="
