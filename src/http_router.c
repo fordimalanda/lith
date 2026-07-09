@@ -7,13 +7,13 @@
 #include "server_utils.h"
 #include "logger.h"
 #include "server.h"
-#include <stdio;h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h> // <--- Requis pour stat (Hot-Reload)
+#include <sys/stat.h> 
 
 extern ThreadPool_t global_pool;
-extern ServerConfig global_config; // <--- Changement pour vérifier use_cache globalement
+extern ServerConfig global_config; 
 
 void send_http_error(socket_t client_socket, int status_code, const char *status_text, const char *description, bool keep_alive) {
     const char *html = get_error_html(status_code, status_text, description);
@@ -85,7 +85,7 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
                 struct stat st;
                 if (stat(file_path, &st) == 0) {
                     if (st.st_mtime > cached->last_modified) {
-                        // Changement de verrou : Libération lecture -> Verrou Écriture pour le Hot-Reload
+                        // Libération lecture -> Verrou Écriture pour le Hot-Reload
                         pthread_rwlock_unlock(&global_pool.ram_cache.rwlock);
                         
                         pthread_rwlock_wrlock(&global_pool.ram_cache.rwlock);
@@ -123,6 +123,7 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
         char *file_content = read_file(file_path, &file_size);
 
         if (file_content) {
+            bytes_processed = file_size;
             lith_log(LOG_INFO, "200 OK (Disk Fallback) - Served: %s", req->path);
 
             char header[384];
