@@ -94,18 +94,8 @@ void lith_start_server(int server_fd, const ServerConfig *config) {
             continue;
         }
 
-        // 2. Configuration du timeout SO_RCVTIMEO (Anti-Slowloris & Keep-Alive Window)
-#ifdef _WIN32
-        DWORD timeout = 3000; // 3 secondes en millisecondes
-        setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
-#else
-        struct timeval tv;
-        tv.tv_sec = 3;        // 3 secondes
-        tv.tv_usec = 0;
-        setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const struct timeval *)&tv, sizeof(tv));
-#endif
-
-        // 3. Injection instantanée dans la file d'attente concurrente du pool
+        // 2. Injection instantanée et directe dans la file d'attente concurrente du pool
+        // (Le timeout SO_RCVTIMEO anti-Slowloris est maintenant géré de manière asynchrone par le worker)
         thread_pool_push(&global_pool, client_socket);
     }
 }

@@ -39,8 +39,8 @@ void display_usage() {
     printf("  -v, --version       Print current stable release version\n");
     printf("  -h, --help          Display available flags and routing commands\n\n");
     printf("Examples:\n");
-    printf("  lith start 8080             Launch in foreground on port 8080\n");
-    printf("  lith start 8080 --daemon    Launch as a background daemon process\n");
+    printf("  lith start 8080       Launch in foreground on port 8080\n");
+    printf("  lith start 8080 -d    Launch as a background daemon process\n");
     printf("----------------------------------------------------------------------\n");
 }
 
@@ -97,9 +97,6 @@ int main(int argc, char *argv[]) {
                 lith_log(LOG_ERROR, "Critical: Daemonization execution routine failed");
                 return 1;
             }
-            // IMPORTANT : Après cette ligne, le processus initial a fait un exit(0).
-            // Nous sommes désormais dans le processus "Démon" détaché.
-            // L'affichage standard (printf) n'écrira plus à l'écran mais dans 'lith.log'.
 #endif
         }
 
