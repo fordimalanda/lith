@@ -11,8 +11,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
+
+// [v1.0.9] Gestion Cross-Platform des Sockets et Timeouts (Unix vs Windows)
+#ifdef _WIN32
+    #include <winsock2.h>
+    #define SET_TIMEOUT_ERROR (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms)) < 0)
+#else
+    #include <sys/socket.h>
+    #include <sys/time.h>
+    #define SET_TIMEOUT_ERROR (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout_tv, sizeof(timeout_tv)) < 0)
+#endif
 
 /**
  * Initialise le pool de workers et pré-charge le cache statique RAM (v1.0.9)
@@ -95,7 +103,6 @@ void thread_pool_shutdown(ThreadPool_t *pool) {
     pthread_mutex_destroy(&pool->mutex);
     pthread_cond_destroy(&pool->cond);
     
-    // Libération complète de la mémoire du cache RAM
     lith_cache_destroy(&pool->ram_cache);
 }
 
@@ -129,11 +136,16 @@ void *lith_client_handler(void *arg) {
         socket_t client_socket = node->socket;
         free(node);
 
-        // Configuration d'un Timeout réseau de 3 secondes pour préserver les workers du pool
-        struct timeval timeout;
-        timeout.tv_sec = 3;
-        timeout.tv_usec = 0;
-        if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+        // [v1.0.9] Abstraction du Timeout (3000ms sur Windows, struct timeval sur Unix)
+#ifdef _WIN32
+        int timeout_ms = 3000;
+#else
+        struct timeval timeout_tv;
+        timeout_tv.tv_sec = 3;
+        timeout_tv.tv_usec = 0;
+#endif
+
+        if (SET_TIMEOUT_ERROR) {
             lith_log(LOG_ERROR, "Failed to apply SO_RCVTIMEO context on client socket.");
         }
 
@@ -150,25 +162,24 @@ void *lith_client_handler(void *arg) {
 
             // Boucle de traitement persistant Keep-Alive HTTP/1.1
             while (keep_running) {
+                // Sous Windows, recv prend un char* au lieu de void* (géré de manière transparente par GCC)
                 int received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
                 
                 if (received > 0) {
                     buffer[received] = '\0';
                     
                     if (parse_http_request(buffer, req) == 0) {
-                        // Routage classique et exécution de la réponse
                         handle_http_route(&ectx, req, buffer, received);
                         
                         if (!req->keep_alive) {
                             keep_running = false;
                         }
                     } else {
-                        // Requête invalide (400) -> on ferme la connexion de force (false)
                         send_http_error(client_socket, 400, "Bad Request", "Malformed HTTP request protocol.", false);
                         keep_running = false;
                     }
                 } else {
-                    // Déconnexion propre du client ou déclenchement du timeout SO_RCVTIMEO
+                    // Fin de flux réseau ou Timeout déclenché
                     keep_running = false;
                 }
             }
