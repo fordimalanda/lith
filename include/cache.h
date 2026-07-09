@@ -7,7 +7,8 @@
 #define LITH_CACHE_H
 
 #include <pthread.h>
-#include <size_t>
+#include <stdbool.h>
+#include <stddef.h>
 
 #define MAX_CACHE_ENTRIES 32
 #define MAX_CACHE_FILE_SIZE (1024 * 1024) // 1 Mo max par fichier pour protéger la RAM

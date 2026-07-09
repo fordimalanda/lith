@@ -1,3 +1,8 @@
+/* * Copyright (c) 2026 Fordi / FomaDev. 
+ * Licensed under FomaDev Public License.
+ * See LICENSE file in the project root for full license information.
+ */
+
 #include "cache.h"
 #include "logger.h"
 #include <stdio.h>
@@ -52,15 +57,17 @@ int lith_cache_add(LithCache *cache, const char *filepath, const char *mime_type
 
     int idx = cache->entry_count;
     strncpy(cache->entries[idx].filepath, filepath, 255);
+    cache->entries[idx].filepath[255] = '\0';
     cache->entries[idx].content = buffer;
     cache->entries[idx].size = read_bytes;
     strncpy(cache->entries[idx].mime_type, mime_type, 63);
+    cache->entries[idx].mime_type[63] = '\0';
     cache->entries[idx].is_active = true;
 
     cache->entry_count++;
     pthread_rwlock_unlock(&cache->rwlock); // Libération du verrou
 
-    lith_log(LOG_INFO, "Cached static resource: %s (%ld bytes mapped to RAM)", filepath, size);
+    lith_log(LOG_INFO, "Cached static resource: %s (%zu bytes mapped to RAM)", filepath, read_bytes);
     return 0;
 }
 
