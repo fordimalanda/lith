@@ -6,7 +6,7 @@ LITH is a minimalist, high-performance, multi-threaded HTTP engine implemented i
 
 - **Architectural Thread Pool**: Instantiates a fixed set of permanent, isolated worker threads upon boot. Eliminates runtime thread spawning/destruction overhead by utilizing a synchronized FIFO task queue managed via POSIX condition variables (`pthread_cond_t`) and mutexes (`pthread_mutex_t`).
 - **High-Throughput Main Loop**: Features an optimized accept-loop that offloads incoming sockets instantly to the shared worker pool, freeing the core network thread to handle maximum incoming connection density per second without blocking on system calls.
-- **In-Memory RAM Cache Subsystem (v1.0.9)**: Features a high-speed, thread-safe static RAM cache (`CacheEntry`) backed by readers-writer locks (`pthread_rwlock_t`). Pre-charges core assets (like `index.html` and `style.css`) into memory to bypass traditional disk I/O bottlenecks.
+- **Hybrid RAM Cache Subsystem (v1.0.9)**: Features a high-speed, thread-safe static RAM cache (`CacheEntry`) backed by readers-writer locks (`pthread_rwlock_t`). Supports an adaptive dual-mode: **Development Mode** (cache disabled for real-time asset modifications) and **Production Mode** with **Thread-Safe Hot-Reload** (automatically synchronizes RAM buffers if a disk file is updated without restarting the engine).
 - **HTTP Keep-Alive Persistent Connections**: Keeps client sockets active for consecutive resource transfers within a secure window. Features automated connection recycling to maximize performance and minimize TCP handshake overhead.
 - **Asynchronous Anti-Slowloris Guard (v1.0.9)**: Arms incoming sockets with a rigid 3-second network receive timeout (`SO_RCVTIMEO`) executed asynchronously by the allocated worker. Natively abstracted to support both UNIX `timeval` structures and Windows `DWORD` millisecond contexts.
 - **Native Background Daemon Mode (Linux Only)**: Detaches the server process from the controlling terminal using a strict dual-`fork()` POSIX sequence. Isolates the process session (`setsid()`), resets the file creation mask (`umask(0)`), and seamlessly redirects standard streams to a continuous localized `lith.log` file.
@@ -38,10 +38,15 @@ LITH loads its runtime configuration from a file named `lith.conf` located in th
 
 ```ini
 # Network listening port
-PORT=8090
+PORT=8001
 
 # Directory containing static web assets
-PUBLIC_DIR=public
+PUBLIC_DIR=views
+
+# Cache strategy configuration (v1.0.9)
+# 0 = DISABLED (Development Mode: Instant disk read on every request, perfect for design)
+# 1 = ENABLED  (Production Mode: High-speed RAM caching with automated Hot-Reload)
+USE_CACHE=0
 ```
 
 ### 3. Deployment & CLI Usage
@@ -52,13 +57,14 @@ LITH features a modern, explicit CLI command architecture. To execute the engine
 
 ```bash
 # Launch the engine in the foreground using standard configuration settings
-bin/lith start
+# Launch the engine in the foreground using standard configuration settings
+lith start
 
 # Override the configured port dynamically via runtime arguments
-bin/lith start 8080
+lith start 8080
 
 # Launch as a background daemon process detached from the terminal (Linux only)
-bin/lith start 8080 --daemon
+lith start 8080 --daemon
 ```
 
 **Note on Windows Portability**: If the `--daemon` or `-d` flag is invoked under Windows, LITH will catch the argument, log an informative warning indicating that background daemons require a UNIX environment, and gracefully fall back to foreground mode to maintain continuous execution.
@@ -66,42 +72,8 @@ bin/lith start 8080 --daemon
 To display context help or print the build version string:
 
 ```bash
-bin/lith --help
-bin/lith --version
-```
-
----
-
-## Repository Architecture
-
-```text
-.
-├── bin/                 # Output directory for compiled executable binaries
-├── include/             # Header files, macros, and cross-platform abstractions
-│   ├── cache.h          # RAM cache data structures and read/write lock prototypes (v1.0.9)
-│   ├── common.h         # Centralized data structures and configuration state variables
-│   ├── config.h         # Runtime environment initialization prototypes (lith.conf parser)
-│   ├── http_parser.h    # HTTP Request structures, MIME mapping, and error pages
-│   ├── http_router.h    # Application routing and static file rendering logic
-│   ├── logger.h         # Centralized thread-safe logging interface
-│   ├── server.h         # Thread pool definitions, worker prototypes, and socket contexts
-│   └── server_utils.h   # Multiplatform OS socket wrappers and safety tools
-├── public/              # Static web root (HTML, CSS, JS, Assets)
-├── src/
-│   ├── server/          # Configuration parser and server utility modules
-│   │   ├── cache.c      # In-memory asset pre-loading and lookups (v1.0.9)
-│   │   ├── config.c     # Runtime initialization logic (lith.conf reader)
-│   │   └── utils.c      # Multiplatform OS abstractions and file system safety
-│   ├── daemon.c         # UNIX-exclusive dual-fork background process daemonizer
-│   ├── http_parser.c    # Case-insensitive protocol parser
-│   ├── http_router.c    # Request handler, route dispatcher, and security validation
-│   ├── logger.c         # Formatted terminal output subsystem
-│   ├── main.c           # Application bootstrap, CLI routing, and WSACleanup network trapping
-│   ├── server.c         # TCP socket initialization, reuse options, and fast accept-push loop
-│   └── server_worker.c  # Persistent pool worker loop, async timeout configuration, and routing
-├── lith.conf            # Runtime configuration file
-├── resources.rc         # Windows application meta-properties and icon descriptor
-└── Makefile             # Universal, multi-platform automated build pipeline
+lith --help
+lith --version
 ```
 
 ---
