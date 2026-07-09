@@ -29,6 +29,9 @@ jobs:
         # Génération de la configuration isolée pour le conteneur de CI
         echo "PORT=8888" > lith.conf
         echo "PUBLIC_DIR=public" >> lith.conf
+        
+        # Sécurité : On duplique la configuration pour couvrir tous les contextes d'exécution relatifs
+        cp lith.conf bin/lith.conf
 
     - name: Build LITH Engine
       run: make
@@ -51,7 +54,17 @@ jobs:
           echo "✅ GET Success: Server responded with HTTP 200"
         else
           echo "❌ GET Failure: Expected 200, got $GET_STATUS"
-          cat server_output.log; kill -9 $SERVER_PID; exit 1
+          echo "=================================================="
+          echo " 📋 STACK TRACE & SERVER LOGS OUTPUT "
+          echo "=================================================="
+          if [ -f server_output.log ]; then
+            cat server_output.log
+          else
+            echo "No server_output.log file was generated."
+          fi
+          echo "=================================================="
+          kill -9 $SERVER_PID 2>/dev/null || true
+          exit 1
         fi
 
         echo "=================================================="
