@@ -7,7 +7,7 @@
 #include "server_utils.h"
 #include "logger.h"
 #include "server.h"
-#include <stdio.h>
+#include <stdio.h>  
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h> 
@@ -123,7 +123,7 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
         char *file_content = read_file(file_path, &file_size);
 
         if (file_content) {
-            bytes_processed = file_size;
+            // Variable fantôme supprimée proprement ici !
             lith_log(LOG_INFO, "200 OK (Disk Fallback) - Served: %s", req->path);
 
             char header[384];
