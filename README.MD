@@ -6,9 +6,9 @@ LITH is a minimalist, high-performance, multi-threaded HTTP engine implemented i
 
 - **Architectural Thread Pool**: Instantiates a fixed set of permanent, isolated worker threads upon boot. Eliminates runtime thread spawning/destruction overhead by utilizing a synchronized FIFO task queue managed via POSIX condition variables (`pthread_cond_t`) and mutexes (`pthread_mutex_t`).
 - **High-Throughput Main Loop**: Features an optimized accept-loop that offloads incoming sockets instantly to the shared worker pool, freeing the core network thread to handle maximum incoming connection density per second without blocking on system calls.
-- **In-Memory RAM Cache Subsystem (v1.0.x)**: Features a high-speed, thread-safe static RAM cache (`CacheEntry`) backed by readers-writer locks (`pthread_rwlock_t`). Pre-charges core assets (like `index.html` and `style.css`) into memory to bypass traditional disk I/O bottlenecks.
+- **In-Memory RAM Cache Subsystem (v1.0.9)**: Features a high-speed, thread-safe static RAM cache (`CacheEntry`) backed by readers-writer locks (`pthread_rwlock_t`). Pre-charges core assets (like `index.html` and `style.css`) into memory to bypass traditional disk I/O bottlenecks.
 - **HTTP Keep-Alive Persistent Connections**: Keeps client sockets active for consecutive resource transfers within a secure window. Features automated connection recycling to maximize performance and minimize TCP handshake overhead.
-- **Asynchronous Anti-Slowloris Guard (v1.0.x)**: Arms incoming sockets with a rigid 3-second network receive timeout (`SO_RCVTIMEO`) executed asynchronously by the allocated worker. Natively abstracted to support both UNIX `timeval` structures and Windows `DWORD` millisecond contexts.
+- **Asynchronous Anti-Slowloris Guard (v1.0.9)**: Arms incoming sockets with a rigid 3-second network receive timeout (`SO_RCVTIMEO`) executed asynchronously by the allocated worker. Natively abstracted to support both UNIX `timeval` structures and Windows `DWORD` millisecond contexts.
 - **Native Background Daemon Mode (Linux Only)**: Detaches the server process from the controlling terminal using a strict dual-`fork()` POSIX sequence. Isolates the process session (`setsid()`), resets the file creation mask (`umask(0)`), and seamlessly redirects standard streams to a continuous localized `lith.log` file.
 - **Advanced I/O POST Payload Streaming**: Features automated network stream processing to fully parse incoming HTTP `POST` requests, handling chunked or fragmented bodies using precise `Content-Length` tracking and multi-stage buffer safety boundaries.
 - **Thread-Safe Isolated Configuration**: Passes critical runtime data (such as the web root asset path) directly inside the thread pool context, completely removing reliance on shared static global variables or race-prone states.
@@ -78,7 +78,7 @@ bin/lith --version
 .
 ├── bin/                 # Output directory for compiled executable binaries
 ├── include/             # Header files, macros, and cross-platform abstractions
-│   ├── cache.h          # RAM cache data structures and read/write lock prototypes (v1.0.x)
+│   ├── cache.h          # RAM cache data structures and read/write lock prototypes (v1.0.9)
 │   ├── common.h         # Centralized data structures and configuration state variables
 │   ├── config.h         # Runtime environment initialization prototypes (lith.conf parser)
 │   ├── http_parser.h    # HTTP Request structures, MIME mapping, and error pages
@@ -89,7 +89,7 @@ bin/lith --version
 ├── public/              # Static web root (HTML, CSS, JS, Assets)
 ├── src/
 │   ├── server/          # Configuration parser and server utility modules
-│   │   ├── cache.c      # In-memory asset pre-loading and lookups (v1.0.x)
+│   │   ├── cache.c      # In-memory asset pre-loading and lookups (v1.0.9)
 │   │   ├── config.c     # Runtime initialization logic (lith.conf reader)
 │   │   └── utils.c      # Multiplatform OS abstractions and file system safety
 │   ├── daemon.c         # UNIX-exclusive dual-fork background process daemonizer
@@ -109,7 +109,7 @@ bin/lith --version
 ## Technical Specifications
 | Parameter | Default Value | Description |
 |-----------|---------------|-------------|
-| `LITH_VERSION` | `1.0.x` | Current stable release version |
+| `LITH_VERSION` | `1.0.9` | Current stable release version |
 | `BUFFER_SIZE` | `4096 bytes` | Standard socket read/write block buffer size |
 | Maximum Buffer | `16 KB` | Maximum cumulative buffer space for HTTP headers and POST bodies |
 | `BACKLOG` | `10` | Maximum number of pending client connections in the listen queue |

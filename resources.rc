@@ -24,12 +24,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "FomaDev (Fordima Inc.)"
             VALUE "FileDescription",  "LITH Engine CLI"
-            VALUE "FileVersion",      "1.0.8"
+            VALUE "FileVersion",      "1.0.9"
             VALUE "InternalName",     "lith"
             VALUE "LegalCopyright",   "Copyright (c) 2026 FomaDev, a Fordima Inc. company."
             VALUE "OriginalFilename", "lith.exe"
             VALUE "ProductName",      "LITH Engine"
-            VALUE "ProductVersion",   "1.0.8"
+            VALUE "ProductVersion",   "1.0.9"
         END
     END
     BLOCK "VarFileInfo"

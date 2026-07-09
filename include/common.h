@@ -13,7 +13,7 @@
 #include <stdbool.h>
 #include <errno.h>
 
-#define LITH_VERSION "1.0.8"
+#define LITH_VERSION "1.0.9"
 #define LITH_SERVER_NAME "LITH-v1"
 
 #define MAX_CONNECTIONS 100
