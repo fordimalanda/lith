@@ -23,17 +23,14 @@ void thread_pool_init(ThreadPool_t *pool, int num_threads, const char *public_di
     pool->size = 0;
     pool->shutdown = false;
     
-    // Sauvegarde du chemin du répertoire public
     strncpy(pool->public_dir, public_dir, sizeof(pool->public_dir) - 1);
     pool->public_dir[sizeof(pool->public_dir) - 1] = '\0';
 
     pthread_mutex_init(&pool->mutex, NULL);
     pthread_cond_init(&pool->cond, NULL);
 
-    // [v1.0.9] Initialisation et allocation du sous-système de Cache RAM
     lith_cache_init(&pool->ram_cache);
     
-    // Warm-up : cartographie mémoire des fichiers stratégiques
     char path_buf[512];
     snprintf(path_buf, sizeof(path_buf), "%s/index.html", public_dir);
     lith_cache_add(&pool->ram_cache, path_buf, "text/html");
@@ -41,11 +38,10 @@ void thread_pool_init(ThreadPool_t *pool, int num_threads, const char *public_di
     snprintf(path_buf, sizeof(path_buf), "%s/style.css", public_dir);
     lith_cache_add(&pool->ram_cache, path_buf, "text/css");
 
-    // Instanciation des Threads Workers fixes
     for (int i = 0; i < num_threads; i++) {
         pthread_t thread;
         if (pthread_create(&thread, NULL, lith_client_handler, (void *)pool) == 0) {
-            pthread_detach(thread); // Autogestion du cycle de vie par l'OS
+            pthread_detach(thread);
         }
     }
     
@@ -83,7 +79,6 @@ void thread_pool_push(ThreadPool_t *pool, socket_t socket) {
     }
     pool->size++;
 
-    // Réveil d'un worker endormi sur la variable de condition
     pthread_cond_signal(&pool->cond);
     pthread_mutex_unlock(&pool->mutex);
 }
@@ -94,14 +89,13 @@ void thread_pool_push(ThreadPool_t *pool, socket_t socket) {
 void thread_pool_shutdown(ThreadPool_t *pool) {
     pthread_mutex_lock(&pool->mutex);
     pool->shutdown = true;
-    pthread_cond_broadcast(&pool->cond); // Réveille tous les threads pour qu'ils quittent
+    pthread_cond_broadcast(&pool->cond);
     pthread_mutex_unlock(&pool->mutex);
 
-    // Un petit temps d'attente pour la sortie des threads ou jointure si nécessaire
     pthread_mutex_destroy(&pool->mutex);
     pthread_cond_destroy(&pool->cond);
     
-    // Destruction et libération de la RAM du cache
+    // Libération complète de la mémoire du cache RAM
     lith_cache_destroy(&pool->ram_cache);
 }
 
@@ -114,7 +108,6 @@ void *lith_client_handler(void *arg) {
     while (true) {
         pthread_mutex_lock(&pool->mutex);
 
-        // Attente tant que la file est vide et que le serveur tourne
         while (pool->head == NULL && !pool->shutdown) {
             pthread_cond_wait(&pool->cond, &pool->mutex);
         }
@@ -124,7 +117,6 @@ void *lith_client_handler(void *arg) {
             break;
         }
 
-        // Extraction (Pop) de la socket de la file FIFO
         Node_t *node = pool->head;
         pool->head = pool->head->next;
         if (pool->head == NULL) {
@@ -137,7 +129,7 @@ void *lith_client_handler(void *arg) {
         socket_t client_socket = node->socket;
         free(node);
 
-        // [v1.0.9] Configuration d'un Timeout de 3 secondes pour préserver la disponibilité du pool
+        // Configuration d'un Timeout réseau de 3 secondes pour préserver les workers du pool
         struct timeval timeout;
         timeout.tv_sec = 3;
         timeout.tv_usec = 0;
@@ -145,50 +137,44 @@ void *lith_client_handler(void *arg) {
             lith_log(LOG_ERROR, "Failed to apply SO_RCVTIMEO context on client socket.");
         }
 
-        // Construction du contexte étendu pour le worker
         ExpandedClientContext ectx;
         ectx.base_ctx.client_socket = client_socket;
         memset(&ectx.base_ctx.client_address, 0, sizeof(ectx.base_ctx.client_address));
         strncpy(ectx.public_dir, pool->public_dir, sizeof(ectx.public_dir) - 1);
         ectx.public_dir[sizeof(ectx.public_dir) - 1] = '\0';
 
-        // Allocation dynamique de la structure de parsing HTTP de LITH
         HttpRequest *req = malloc(sizeof(HttpRequest));
         if (req) {
             char buffer[BUFFER_SIZE];
             bool keep_running = true;
 
-            // [v1.0.9] Boucle d'exécution HTTP/1.1 Keep-Alive
+            // Boucle de traitement persistant Keep-Alive HTTP/1.1
             while (keep_running) {
                 int received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
                 
                 if (received > 0) {
                     buffer[received] = '\0';
                     
-                    // Passage du buffer au parser natif de LITH
                     if (parse_http_request(buffer, req) == 0) {
-                        lith_log(LOG_INFO, "Request: %s %s", method_to_str(req->method), req->path);
-                        
-                        // Routage vers le cache RAM ou fallback disque
+                        // Routage classique et exécution de la réponse
                         handle_http_route(&ectx, req, buffer, received);
                         
-                        // Si le protocole demande une fermeture immédiate, on coupe la boucle de persistance
                         if (!req->keep_alive) {
                             keep_running = false;
                         }
                     } else {
-                        send_http_error(client_socket, 400, "Bad Request", "Malformed HTTP request protocol.");
+                        // Requête invalide (400) -> on ferme la connexion de force (false)
+                        send_http_error(client_socket, 400, "Bad Request", "Malformed HTTP request protocol.", false);
                         keep_running = false;
                     }
                 } else {
-                    // Fin de flux (FIN envoyé par le client) ou interruption par Timeout (EAGAIN/EWOULDBLOCK)
+                    // Déconnexion propre du client ou déclenchement du timeout SO_RCVTIMEO
                     keep_running = false;
                 }
             }
             free(req);
         }
 
-        // Fermeture obligatoire pour libérer et recycler le descripteur de fichier (FD)
         lith_close_socket(client_socket);
     }
 
