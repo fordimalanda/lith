@@ -6,9 +6,12 @@
 #include "http_router.h"
 #include "server_utils.h"
 #include "logger.h"
-#include <stdio.h>
+#include "server.h"
+#include <stdio;h>
 #include <stdlib.h>
 #include <string.h>
+
+extern ThreadPool_t global_pool; // Récupération du pool global contenant le cache
 
 void send_http_error(socket_t client_socket, int status_code, const char *status_text, const char *description) {
     const char *html = get_error_html(status_code, status_text, description);
@@ -25,7 +28,6 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
     (void)full_buffer; 
     (void)total_received;
 
-    // Accès par pointeur (->) pour le log
     lith_log(LOG_INFO, "Request: %s %s", method_to_str(req->method), req->path);
 
     // Détermination dynamique du statut de connexion à renvoyer au client
@@ -48,7 +50,7 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
         send(ctx->client_socket, header, (int)strlen(header), 0);
         send(ctx->client_socket, response_body, (int)strlen(response_body), 0);
     } 
-    // --- ROUTE FICHIERS STATIQUES : GET ---
+    // --- ROUTE FICHIERS STATIQUES : GET (Modifié v1.0.9 avec RAM Cache) ---
     else if (req->method == METHOD_GET) {
         if (!is_safe_path(req->path)) {
             lith_log(LOG_WARN, "Security Alert: Blocked traversal attempt on path: %s", req->path);
@@ -56,6 +58,7 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
             return;
         }
 
+        // 1. Résolution de la clé de hachage / chemin local du fichier demandé
         char file_path[512];
         strncpy(file_path, ectx->public_dir, sizeof(file_path) - 1);
         file_path[sizeof(file_path) - 1] = '\0';
@@ -66,6 +69,25 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
             strcat(file_path, req->path);
         }
 
+        // 2. INTERCEPTION : Recherche directe dans le sous-système de Cache RAM
+        CacheEntry *cached = lith_cache_lookup(&global_pool.ram_cache, file_path);
+        
+        if (cached != NULL) {
+            // --- HIT CACHE : Lecture RAM foudroyante ---
+            char header[384];
+            snprintf(header, sizeof(header), 
+                     "HTTP/1.1 200 OK\r\nContent-Length: %zu\r\nContent-Type: %s\r\nConnection: %s\r\nKeep-Alive: timeout=3, max=100\r\n\r\n", 
+                     cached->size, cached->mime_type, conn_state);
+                     
+            send(ctx->client_socket, header, (int)strlen(header), 0);
+            send(ctx->client_socket, cached->content, (int)cached->size, 0);
+            
+            // LIBÉRATION CRITIQUE : Libère le rwlock après lecture
+            pthread_rwlock_unlock(&global_pool.ram_cache.rwlock);
+            return;
+        }
+
+        // --- MISS CACHE : Fallback disque traditionnel ---
         long file_size = 0;
         char *file_content = read_file(file_path, &file_size);
 
@@ -73,7 +95,6 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
             char header[384];
             const char *mime_type = get_mime_type(file_path);
             
-            // Formatage de l'en-tête intégrant le Keep-Alive dynamique
             snprintf(header, sizeof(header), 
                      "HTTP/1.1 200 OK\r\nContent-Length: %ld\r\nContent-Type: %s\r\nConnection: %s\r\nKeep-Alive: timeout=3, max=100\r\n\r\n", 
                      file_size, mime_type, conn_state);
