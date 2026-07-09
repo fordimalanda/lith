@@ -3,11 +3,11 @@
 # ==============================================================================
 
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -pthread -MMD -MP
+CFLAGS = -Wall -Wextra -std=c11 -D_GNU_SOURCE -pthread -MMD -MP
 INCLUDES = -Iinclude
 TARGET_DIR = bin
 
-# 1. Sources communes à toutes les plateformes
+# 1. Sources communes à toutes les plateformes (Ajout du module cache.c)
 SRCS = src/main.c \
        src/server.c \
        src/server_worker.c \
@@ -15,7 +15,8 @@ SRCS = src/main.c \
        src/http_router.c \
        src/logger.c \
        src/server/config.c \
-       src/server/utils.c
+       src/server/utils.c \
+       src/server/cache.c
 
 # Initialisation des variables spécifiques aux ressources Windows
 RES_OBJ = 

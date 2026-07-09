@@ -4,6 +4,7 @@
  */
 
 #include "server.h"
+#include "server_utils.h"
 #include "logger.h"
 #include "config.h"
 #include "common.h"
@@ -14,15 +15,26 @@
 #include <stdbool.h>
 
 ThreadPool_t global_pool;
+ServerConfig global_config; // Variable globale partagée pour exposer use_cache au routeur
+int global_server_fd = -1;  // Référence globale pour libérer accept() lors du Ctrl+C
 
 void handle_sigint(int sig) {
     (void)sig;
     printf("\n");
     lith_log(LOG_INFO, "Initiating LITH orderly shutdown sequence...");
+    
+    // 1. Fermeture forcée du socket d'écoute pour débloquer immédiatement accept()
+    if (global_server_fd != -1) {
+        lith_close_socket(global_server_fd);
+    }
+    
+    // 2. Arrêt propre des workers
     thread_pool_shutdown(&global_pool);
+
 #ifdef _WIN32
     WSACleanup();
 #endif
+
     lith_log(LOG_INFO, "LITH server engine stopped successfully. Goodbye.");
     exit(0);
 }
@@ -39,8 +51,8 @@ void display_usage() {
     printf("  -v, --version       Print current stable release version\n");
     printf("  -h, --help          Display available flags and routing commands\n\n");
     printf("Examples:\n");
-    printf("  lith start 8080             Launch in foreground on port 8080\n");
-    printf("  lith start 8080 --daemon    Launch as a background daemon process\n");
+    printf("  lith start 8080       Launch in foreground on port 8080\n");
+    printf("  lith start 8080 -d    Launch as a background daemon process\n");
     printf("----------------------------------------------------------------------\n");
 }
 
@@ -63,9 +75,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (strcmp(argv[1], "start") == 0) {
-        ServerConfig config;
         // 1. Lecture impérative de la config avant de faire chdir("/") dans la démonisation
-        load_config("lith.conf", &config);
+        load_config("lith.conf", &global_config);
 
         int port_override = 0;
         bool use_daemon = false;
@@ -84,7 +95,7 @@ int main(int argc, char *argv[]) {
 
         if (port_override > 0) {
             lith_log(LOG_INFO, "CLI Argument detected: Overriding port to %d", port_override);
-            config.port = port_override;
+            global_config.port = port_override;
         }
 
         // --- ENCLENCHEMENT DU MODE DÉMON LINUX v1.0.8 ---
@@ -97,9 +108,6 @@ int main(int argc, char *argv[]) {
                 lith_log(LOG_ERROR, "Critical: Daemonization execution routine failed");
                 return 1;
             }
-            // IMPORTANT : Après cette ligne, le processus initial a fait un exit(0).
-            // Nous sommes désormais dans le processus "Démon" détaché.
-            // L'affichage standard (printf) n'écrira plus à l'écran mais dans 'lith.log'.
 #endif
         }
 
@@ -108,16 +116,18 @@ int main(int argc, char *argv[]) {
         printf("   Status: Initializing Architecture...\n");
         printf("----------------------------------------\n");
 
-        thread_pool_init(&global_pool, 8, config.public_dir);
+        thread_pool_init(&global_pool, 8, global_config.public_dir);
 
-        int server_fd = lith_init_server(&config);
+        int server_fd = lith_init_server(&global_config);
         if (server_fd < 0) {
             lith_log(LOG_ERROR, "Critical: Failed to initialize network socket layer");
             thread_pool_shutdown(&global_pool);
             return 1;
         }
 
-        lith_start_server(server_fd, &config);
+        global_server_fd = server_fd; // Armement de la référence globale pour le signal SIGINT
+
+        lith_start_server(server_fd, &global_config);
         return 0;
     }
 

@@ -14,11 +14,12 @@ int load_config(const char *filename, ServerConfig *config) {
     // Valeurs de secours par défaut
     config->port = 8090;
     strcpy(config->public_dir, "public");
+    config->use_cache = 0; // <--- Par défaut : Cache Désactivé (Mode DEV)
 
     FILE *f = fopen(filename, "r");
     if (!f) {
-        lith_log(LOG_WARN, "Configuration file '%s' not found. Using defaults (Port: %d, Root: %s)", 
-                 filename, config->port, config->public_dir);
+        lith_log(LOG_WARN, "Configuration file '%s' not found. Using defaults (Port: %d, Root: %s, Cache: %d)", 
+                 filename, config->port, config->public_dir, config->use_cache);
         return -1;
     }
 
@@ -52,10 +53,13 @@ int load_config(const char *filename, ServerConfig *config) {
         } else if (strcmp(key, "PUBLIC_DIR") == 0) {
             strncpy(config->public_dir, value, sizeof(config->public_dir) - 1);
             config->public_dir[sizeof(config->public_dir) - 1] = '\0';
+        } else if (strcmp(key, "USE_CACHE") == 0) { // <--- AJOUT du parsing
+            config->use_cache = atoi(value);
         }
     }
 
     fclose(f);
-    lith_log(LOG_INFO, "Configuration loaded: Port=%d, Public Directory='%s'", config->port, config->public_dir);
+    lith_log(LOG_INFO, "Configuration loaded: Port=%d, Public Directory='%s', Cache=%s", 
+             config->port, config->public_dir, config->use_cache ? "ENABLED (Production Mode)" : "DISABLED (Development Mode)");
     return 0;
 }
