@@ -14,15 +14,25 @@
 #include <stdbool.h>
 
 ThreadPool_t global_pool;
+int global_server_fd = -1; // Référence globale pour libérer accept() lors du Ctrl+C
 
 void handle_sigint(int sig) {
     (void)sig;
     printf("\n");
     lith_log(LOG_INFO, "Initiating LITH orderly shutdown sequence...");
+    
+    // 1. Fermeture forcée du socket d'écoute pour débloquer immédiatement accept()
+    if (global_server_fd != -1) {
+        lith_close_socket(global_server_fd);
+    }
+    
+    // 2. Arrêt propre des workers
     thread_pool_shutdown(&global_pool);
+
 #ifdef _WIN32
     WSACleanup();
 #endif
+
     lith_log(LOG_INFO, "LITH server engine stopped successfully. Goodbye.");
     exit(0);
 }
@@ -113,6 +123,8 @@ int main(int argc, char *argv[]) {
             thread_pool_shutdown(&global_pool);
             return 1;
         }
+
+        global_server_fd = server_fd; // Armement de la référence globale pour le signal SIGINT
 
         lith_start_server(server_fd, &config);
         return 0;

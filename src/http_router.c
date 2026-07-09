@@ -90,6 +90,9 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
         CacheEntry *cached = lith_cache_lookup(&global_pool.ram_cache, file_path);
         
         if (cached != NULL) {
+            // AJOUT LOG : Suivi des Hits du Cache RAM
+            lith_log(LOG_INFO, "200 OK (RAM Cache hit) - Served: %s", req->path);
+
             char header[384];
             snprintf(header, sizeof(header), 
                      "HTTP/1.1 200 OK\r\n"
@@ -111,6 +114,9 @@ void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full
         char *file_content = read_file(file_path, &file_size);
 
         if (file_content) {
+            // AJOUT LOG : Suivi des Miss / Lectures depuis le Disque
+            lith_log(LOG_INFO, "200 OK (Disk Fallback) - Served: %s", req->path);
+
             char header[384];
             const char *mime_type = get_mime_type(file_path);
             
