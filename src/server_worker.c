@@ -151,7 +151,7 @@ void *lith_client_handler(void *arg) {
             break;
         }
 
-        // [vx.x.x] Abstraction du Timeout (3000ms) avant Handshake cryptographique
+        // Abstraction du Timeout (3000ms) avant Handshake cryptographique
 #ifdef _WIN32
         int timeout_ms = 3000;
 #else
@@ -197,12 +197,37 @@ void *lith_client_handler(void *arg) {
 
             // 4. Boucle persistante Keep-Alive sur couche TLS (SSL_read)
             while (keep_running) {
+                // Remise à zéro complète du tampon à chaque itération Keep-Alive
+                memset(buffer, 0, sizeof(buffer));
                 int received = SSL_read(ssl, buffer, sizeof(buffer) - 1);
                 
                 if (received > 0) {
                     buffer[received] = '\0';
                     
                     if (parse_http_request(buffer, req) == 0) {
+                        
+                        // [vx.x.x] Accumulation stricte du Body pour les requêtes volumineuses (POST)
+                        if (req->method == METHOD_POST && req->content_length > 0) {
+                            long body_received = 0;
+                            
+                            if (req->body_start) {
+                                // Calcul de la taille du fragment initial du body capturé au premier read
+                                body_received = received - (req->body_start - buffer);
+                            }
+                            
+                            // Tant qu'il manque des octets par rapport au Content-Length attendu
+                            while (body_received < req->content_length && received < (BUFFER_SIZE - 1)) {
+                                int chunk = SSL_read(ssl, buffer + received, sizeof(buffer) - 1 - received);
+                                if (chunk <= 0) {
+                                    break; // Rupture de flux ou timeout
+                                }
+                                received += chunk;
+                                buffer[received] = '\0';
+                                body_received += chunk;
+                            }
+                        }
+
+                        // Routage avec l'assurance d'avoir collecté l'intégralité de la charge utile
                         handle_http_route(&ectx, req, buffer, received);
                         
                         if (!req->keep_alive) {

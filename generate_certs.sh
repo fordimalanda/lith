@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # Script d'automatisation de génération de certificats TLS pour LITH Server
-# Context: Kinshasa, v1.1.0 Development
+# Context: Kinshasa, vx.x.x Development
 # ==============================================================================
 
 CERT_DIR="certs"
