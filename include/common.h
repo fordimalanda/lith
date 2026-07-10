@@ -24,6 +24,8 @@ typedef struct {
     int port;
     char public_dir[256];
     int use_cache; // 0 = Off (Développement), 1 = Hot-Reload (Production)
+    char ssl_cert_path[256]; // <-- Nouveau vx.x.x
+    char ssl_key_path[256];  // <-- Nouveau vx.x.x
 } ServerConfig;
 
 #define CHECK_ERROR(condition, msg) \
