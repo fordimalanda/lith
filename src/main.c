@@ -33,6 +33,9 @@ void handle_sigint(int sig) {
     }
     
     thread_pool_shutdown(&global_pool);
+    
+    // Libération du contexte et des structures OpenSSL
+    lith_ssl_cleanup();
 
 #ifdef _WIN32
     WSACleanup();
@@ -109,12 +112,11 @@ int main(int argc, char *argv[]) {
             global_config.port = port_override;
         }
 
-        // --- ENCLENCHEMENT DU MODE DÉMON LINUX (Résolution des chemins absolus) ---
+        // --- ENCLENCHEMENT DU MODE DÉMON LINUX ---
         if (use_daemon) {
 #ifdef _WIN32
             lith_log(LOG_WARN, "Daemon mode (-d/--daemon) is not supported natively on Windows. Falling back to foreground.");
 #else
-            // Résolution dynamique du dossier public vers un chemin absolu
             if (global_config.public_dir[0] != '/') {
                 char absolute_public[512];
                 snprintf(absolute_public, sizeof(absolute_public), "%s/%s", initial_cwd, global_config.public_dir);
@@ -124,7 +126,6 @@ int main(int argc, char *argv[]) {
 
             lith_log(LOG_INFO, "Detaching session. LITH is shifting control to background daemon...");
             
-            // On transmet le chemin d'origine pour l'ancrage correct du fichier lith.log
             if (lith_daemonize(initial_cwd) < 0) {
                 lith_log(LOG_ERROR, "Critical: Daemonization execution routine failed");
                 return 1;
@@ -137,12 +138,20 @@ int main(int argc, char *argv[]) {
         printf("   Status: Initializing Architecture...\n");
         printf("----------------------------------------\n");
 
+        // 3. INITIALISATION DU MOTEUR CRYPTOGRAPHIQUE SSL
+        if (lith_ssl_init(&global_config) < 0) {
+            lith_log(LOG_ERROR, "Critical: Failed to bootstrap OpenSSL context engine. Aborting launch.");
+            return 1;
+        }
+
+        // 4. Initialisation des workers et du socket d'écoute
         thread_pool_init(&global_pool, 8, global_config.public_dir);
 
         int server_fd = lith_init_server(&global_config);
         if (server_fd < 0) {
             lith_log(LOG_ERROR, "Critical: Failed to initialize network socket layer");
             thread_pool_shutdown(&global_pool);
+            lith_ssl_cleanup();
             return 1;
         }
 
