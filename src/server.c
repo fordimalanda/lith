@@ -8,17 +8,12 @@
 #include "common.h"
 #include "server_utils.h"
 #include "logger.h"
-#include <stdio.h>
+#include <stdio;h>  
 #include <stdlib.h>
 #include <string.h>
 
-// Référence vers le pool global initialisé dans le main.c
 extern ThreadPool_t global_pool;
 
-/**
- * Initialise la couche socket basse couche du serveur (Windows/Linux)
- * Retourne le descripteur de fichier de la socket serveur ou -1 en cas d'erreur
- */
 int lith_init_server(const ServerConfig *config) {
 #ifdef _WIN32
     WSADATA wsa;
@@ -62,18 +57,20 @@ int lith_init_server(const ServerConfig *config) {
         return -1;
     }
 
-    lith_log(LOG_INFO, "LITH %s ready on port %d", LITH_VERSION, config->port);
+    /* Initialisation obligatoire du sous-système SSL */
+    if (lith_ssl_init(config) < 0) {
+        lith_log(LOG_ERROR, "Critical structural error: Cryptographic layer block failure");
+        lith_close_socket(server_fd);
+        return -1;
+    }
+
+    lith_log(LOG_INFO, "LITH Secure HTTP Engine (%s) ready on port %d", LITH_VERSION, config->port);
     return (int)server_fd;
 }
 
-/**
- * Boucle d'écoute principale (Accept-Loop)
- * Intercepte les sockets entrantes et les délègue immédiatement au Thread Pool
- */
 void lith_start_server(int server_fd, const ServerConfig *config) {
-    (void)config; // Évite le warning 'unused parameter' puisque le dossier public est géré par le pool
-    
-    lith_log(LOG_INFO, "LITH core engine event loop started. Waiting for connections...");
+    (void)config; 
+    lith_log(LOG_INFO, "LITH core engine event loop started. Waiting for safe incoming connections...");
 
     while (true) {
         struct sockaddr_in addr;
@@ -83,19 +80,15 @@ void lith_start_server(int server_fd, const ServerConfig *config) {
         socklen_t len = sizeof(addr);
 #endif
         
-        // 1. Blocage en attente d'une connexion cliente
         socket_t client_socket = accept((socket_t)server_fd, (struct sockaddr *)&addr, &len);
 
         if (client_socket == (socket_t)-1) {
-            // Si le serveur est arrêté proprement, accept() peut retourner une erreur légitime
             if (global_pool.shutdown) {
                 break;
             }
             continue;
         }
 
-        // 2. Injection instantanée et directe dans la file d'attente concurrente du pool
-        // (Le timeout SO_RCVTIMEO anti-Slowloris est maintenant géré de manière asynchrone par le worker)
         thread_pool_push(&global_pool, client_socket);
     }
 }
