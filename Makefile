@@ -32,7 +32,6 @@ ifeq ($(OS),Windows_NT)
     LIBS = -L"$(MINGW_ROOT)/lib" -L"$(MINGW_ROOT)/x86_64-w64-mingw32/lib" -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32
     
     # Commandes système Windows
-    MKDIR = if not exist $(TARGET_DIR) mkdir $(TARGET_DIR)
     RM = del /Q /F
     FIX_PATH = $(subst /,\\,$1)
 else
@@ -42,7 +41,6 @@ else
     SRCS += $(SRC_DIR)/daemon.c
     
     # Commandes système Unix
-    MKDIR = mkdir -p $(TARGET_DIR)
     RM = rm -f
     FIX_PATH = $1
 endif
@@ -54,9 +52,13 @@ DEPS = $(SRCS:.c=.d)
 # Règle principale (Build par défaut)
 all: $(TARGET)
 
-# Liaison du binaire final
+# Liaison du binaire final (Sécurisée contre les conflits de Shell intermédiaires)
 $(TARGET): $(OBJS)
-	@$(MKDIR)
+ifeq ($(OS),Windows_NT)
+	@if not exist $(TARGET_DIR) mkdir $(TARGET_DIR)
+else
+	@mkdir -p $(TARGET_DIR)
+endif
 	$(CC) $(CFLAGS) $(INCLUDES) $(OBJS) -o $(TARGET) $(LIBS)
 	@echo "[+] Compilation réussie : $(TARGET)"
 
