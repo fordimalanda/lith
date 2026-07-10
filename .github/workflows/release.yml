@@ -31,12 +31,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up GCC (Windows)
+    - name: Set up GCC & OpenSSL (Windows)
       if: matrix.os == 'windows-latest'
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
-        install: mingw-w64-x86_64-gcc gcc make
+        install: mingw-w64-x86_64-gcc mingw-w64-x86_64-openssl gcc make
 
     - name: Compile LITH (Linux & Mac)
       if: matrix.os != 'windows-latest'
@@ -49,7 +49,7 @@ jobs:
       shell: msys2 {0}
       run: |
         mkdir -p bin
-        make
+        make OPENSSL_ROOT=/mingw64
 
     - name: Get Version from Tag
       id: get_version
@@ -67,6 +67,9 @@ jobs:
         # Copie de l'exécutable dans dist/bin/
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           cp bin/lith.exe dist/bin/lith.exe
+          # Inclusion des DLL d'exécution d'OpenSSL pour la portabilité du binaire Windows distribué
+          cp /mingw64/bin/libssl-*.dll dist/bin/ 2>/dev/null || cp /c/OpenSSL-Win64/bin/libssl-*.dll dist/bin/ || true
+          cp /mingw64/bin/libcrypto-*.dll dist/bin/ 2>/dev/null || cp /c/OpenSSL-Win64/bin/libcrypto-*.dll dist/bin/ || true
         else
           cp bin/lith dist/bin/lith
         fi

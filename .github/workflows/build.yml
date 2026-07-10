@@ -32,12 +32,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up GCC (Windows)
+    - name: Set up GCC & OpenSSL (Windows)
       if: matrix.os == 'windows-latest'
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
-        install: mingw-w64-x86_64-gcc gcc make
+        install: mingw-w64-x86_64-gcc mingw-w64-x86_64-openssl gcc make
 
     - name: Compile LITH (Linux & Mac)
       if: matrix.os != 'windows-latest'
@@ -45,12 +45,13 @@ jobs:
         mkdir -p bin
         make
 
+    # Compilation Windows utilisant le package natif OpenSSL de MSYS2 qui correspond à notre Makefile
     - name: Compile LITH (Windows)
       if: matrix.os == 'windows-latest'
       shell: msys2 {0}
       run: |
         mkdir -p bin
-        make
+        make OPENSSL_ROOT=/mingw64
 
     # Alignement de l'arborescence intermédiaire du build de test
     - name: Prepare Workspace Folder Structure
@@ -61,6 +62,9 @@ jobs:
         
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           cp bin/lith.exe dist/bin/lith.exe
+          # Inclusion des DLL OpenSSL requises pour que l'exécutable Windows fonctionne partout
+          cp /mingw64/bin/libssl-*.dll dist/bin/ 2>/dev/null || cp /c/OpenSSL-Win64/bin/libssl-*.dll dist/bin/ || true
+          cp /mingw64/bin/libcrypto-*.dll dist/bin/ 2>/dev/null || cp /c/OpenSSL-Win64/bin/libcrypto-*.dll dist/bin/ || true
         else
           cp bin/lith dist/bin/lith
         fi
