@@ -1,8 +1,12 @@
-# * Copyright (c) 2026 Fordi / FomaDev. 
+📄 Le code complet du Makefile corrigé
+Voici ton fichier Makefile unifié, commenté et prêt à être déployé :
+
+Makefile
+# * Copyright (c) 2026 Fordi / FomaDev.
 # * Licensed under FomaDev Public License.
 # * See LICENSE file in the project root for full license information.
 
-# Configuration générale des répertoires
+# Configuration générale des répertoires et compilateur
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -D_GNU_SOURCE -pthread -MMD -MP
 INCLUDES = -Iinclude
@@ -18,28 +22,34 @@ SRCS = $(SRC_DIR)/main.c \
        $(SRC_DIR)/http_router.c \
        $(SRC_DIR)/server_utils.c
 
-# Détection de l'OS pour les drapeaux d'édition de liens et extensions
+# Détection de l'OS pour adapter les dépendances, drapeaux et extensions
 ifeq ($(OS),Windows_NT)
     TARGET = $(TARGET_DIR)/lith.exe
     
-    # [Windows Configuration via Git SDK Library Paths]
-    # L'inclusion se fait en local (-Iinclude), les libs pointent vers le SDK Git stable
-    LIBS = -L"C:/Program Files/Git/usr/lib" -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32
+    # Si OPENSSL_ROOT est défini (ex: sur GitHub Actions avec /mingw64)
+    ifneq ($(OPENSSL_ROOT),)
+        INCLUDES += -I$(OPENSSL_ROOT)/include
+        LIBS = -L$(OPENSSL_ROOT)/lib -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32
+    else
+        # Configuration locale par défaut sur ton PC (via ton dossier épuré deps/)
+        INCLUDES += -I"deps/openssl/include"
+        LIBS = -L"deps/openssl/lib/VC/x64/MD" -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32
+    endif
 else
-    # [Linux / Ubuntu Configuration]
+    # Configuration Linux / Ubuntu standard
     TARGET = $(TARGET_DIR)/lith
     LIBS = -lssl -lcrypto -pthread
     SRCS += $(SRC_DIR)/daemon.c
 endif
 
-# Génération automatique des fichiers objets et de dépendances
+# Génération automatique des fichiers objets et des fichiers de dépendances
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 
 # Règle principale (Build par défaut)
 all: $(TARGET)
 
-# Liaison du binaire final (Agnostique du shell grâce aux outils POSIX)
+# Liaison du binaire final
 $(TARGET): $(OBJS)
 	@mkdir -p $(TARGET_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $(OBJS) -o $(TARGET) $(LIBS)
@@ -49,10 +59,10 @@ $(TARGET): $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-# Inclusion des fichiers de dépendances générés par GCC (-MMD -MP)
+# Inclusion des fichiers de dépendances générés automatiquement par GCC
 -include $(DEPS)
 
-# Nettoyage propre et unifié utilisant 'rm' (fourni par w64devkit sous Windows ou natif sous Linux)
+# Nettoyage unifié des artefacts de compilation
 clean:
 	rm -f $(SRC_DIR)/*.o $(SRC_DIR)/*.d $(TARGET)
 	@echo "[+] Project cleanup completed."
