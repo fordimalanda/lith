@@ -14,7 +14,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-// [v1.1.0] Gestion Multi-plateforme des Sockets et Timeouts SSL (Unix vs Windows)
+// [vx.x.x] Gestion Multi-plateforme des Sockets et Timeouts SSL (Unix vs Windows)
 #ifdef _WIN32
     #include <winsock2.h>
     #define SET_TIMEOUT_ERROR (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms)) < 0)
@@ -151,7 +151,7 @@ void *lith_client_handler(void *arg) {
             break;
         }
 
-        // [v1.1.0] Abstraction du Timeout (3000ms) avant Handshake cryptographique
+        // [vx.x.x] Abstraction du Timeout (3000ms) avant Handshake cryptographique
 #ifdef _WIN32
         int timeout_ms = 3000;
 #else
