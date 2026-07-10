@@ -22,15 +22,15 @@
     typedef int socket_t;
 #endif
 
-/* API de contrôle d'infrastructure - Mode Démon Linux (v1.0.8) */
+/* API de contrôle d'infrastructure - Mode Démon Linux */
 #ifndef _WIN32
-int lith_daemonize(void);
+int lith_daemonize(const char *initial_cwd); // Mises à jour pour la gestion des chemins absolus
 #endif
 
 #include <pthread.h>
 #include <stdbool.h>
 #include "common.h" // Contient ServerConfig
-#include "cache.h"  // Intégration du module de cache v1.0.9
+#include "cache.h"  // Intégration du module de cache
 
 #define DEFAULT_PORT 8090
 #define BACKLOG 10
@@ -51,7 +51,7 @@ typedef struct {
 } ExpandedClientContext;
 
 /* ==============================================================================
- * STRUCTURES DU THREAD POOL (v1.0.7)
+ * STRUCTURES DU THREAD POOL
  * ============================================================================== */
 
 typedef struct Node {
@@ -67,7 +67,7 @@ typedef struct {
     pthread_cond_t cond;    // Variable de condition pour réveiller les workers
     bool shutdown;          // Drapeau d'arrêt global du serveur
     char public_dir[256];   // Copie locale du répertoire public pour les workers
-    LithCache ram_cache;    // <--- LE CACHE REJOINT LE CONTEXTE DES WORKERS (v1.0.9)
+    LithCache ram_cache;    // Le cache rejoint le contexte des workers
 } ThreadPool_t;
 
 /* ==============================================================================

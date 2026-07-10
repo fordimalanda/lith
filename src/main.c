@@ -13,22 +13,25 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <limits.h>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 ThreadPool_t global_pool;
-ServerConfig global_config; // Variable globale partagée pour exposer use_cache au routeur
-int global_server_fd = -1;  // Référence globale pour libérer accept() lors du Ctrl+C
+ServerConfig global_config; 
+int global_server_fd = -1;  
 
 void handle_sigint(int sig) {
     (void)sig;
     printf("\n");
     lith_log(LOG_INFO, "Initiating LITH orderly shutdown sequence...");
     
-    // 1. Fermeture forcée du socket d'écoute pour débloquer immédiatement accept()
     if (global_server_fd != -1) {
         lith_close_socket(global_server_fd);
     }
     
-    // 2. Arrêt propre des workers
     thread_pool_shutdown(&global_pool);
 
 #ifdef _WIN32
@@ -75,13 +78,21 @@ int main(int argc, char *argv[]) {
     }
 
     if (strcmp(argv[1], "start") == 0) {
-        // 1. Lecture impérative de la config avant de faire chdir("/") dans la démonisation
+        // 1. Sauvegarde du répertoire de travail initial avant isolation
+        char initial_cwd[512] = {0};
+#ifndef _WIN32
+        if (getcwd(initial_cwd, sizeof(initial_cwd)) == NULL) {
+            lith_log(LOG_ERROR, "Failed to get current working directory");
+            return 1;
+        }
+#endif
+
+        // 2. Lecture impérative de la configuration
         load_config("lith.conf", &global_config);
 
         int port_override = 0;
         bool use_daemon = false;
 
-        // Analyse des flags additionnels : lith start [port] [--daemon / -d]
         for (int i = 2; i < argc; i++) {
             if (strcmp(argv[i], "--daemon") == 0 || strcmp(argv[i], "-d") == 0) {
                 use_daemon = true;
@@ -98,13 +109,23 @@ int main(int argc, char *argv[]) {
             global_config.port = port_override;
         }
 
-        // --- ENCLENCHEMENT DU MODE DÉMON LINUX v1.0.8 ---
+        // --- ENCLENCHEMENT DU MODE DÉMON LINUX (Résolution des chemins absolus) ---
         if (use_daemon) {
 #ifdef _WIN32
             lith_log(LOG_WARN, "Daemon mode (-d/--daemon) is not supported natively on Windows. Falling back to foreground.");
 #else
+            // Résolution dynamique du dossier public vers un chemin absolu
+            if (global_config.public_dir[0] != '/') {
+                char absolute_public[512];
+                snprintf(absolute_public, sizeof(absolute_public), "%s/%s", initial_cwd, global_config.public_dir);
+                strncpy(global_config.public_dir, absolute_public, sizeof(global_config.public_dir) - 1);
+                global_config.public_dir[sizeof(global_config.public_dir) - 1] = '\0';
+            }
+
             lith_log(LOG_INFO, "Detaching session. LITH is shifting control to background daemon...");
-            if (lith_daemonize() < 0) {
+            
+            // On transmet le chemin d'origine pour l'ancrage correct du fichier lith.log
+            if (lith_daemonize(initial_cwd) < 0) {
                 lith_log(LOG_ERROR, "Critical: Daemonization execution routine failed");
                 return 1;
             }
@@ -125,7 +146,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        global_server_fd = server_fd; // Armement de la référence globale pour le signal SIGINT
+        global_server_fd = server_fd; 
 
         lith_start_server(server_fd, &global_config);
         return 0;
