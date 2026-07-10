@@ -24,3 +24,19 @@ obj/
 *.out
 
 *.res
+
+
+
+# Ignorer le dossier deps par défaut
+deps/
+
+# Réinclure uniquement notre arborescence OpenSSL minimale
+!deps/openssl/
+!deps/openssl/include/
+!deps/openssl/include/**
+!deps/openssl/lib/
+!deps/openssl/lib/VC/
+!deps/openssl/lib/VC/x64/
+!deps/openssl/lib/VC/x64/MD/
+!deps/openssl/lib/VC/x64/MD/libssl.lib
+!deps/openssl/lib/VC/x64/MD/libcrypto.lib
