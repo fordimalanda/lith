@@ -9,14 +9,17 @@ INCLUDES = -Iinclude
 TARGET_DIR = bin
 SRC_DIR = src
 
-# Liste de base des fichiers sources (Mise à jour du chemin de cache.c)
+# Liste exacte et synchronisée des fichiers sources
 SRCS = $(SRC_DIR)/main.c \
        $(SRC_DIR)/server_worker.c \
        $(SRC_DIR)/http_parser.c \
-       $(SRC_DIR)/server/cache.c \
        $(SRC_DIR)/logger.c \
        $(SRC_DIR)/http_router.c \
-       $(SRC_DIR)/server_utils.c
+       $(SRC_DIR)/server.c \
+       $(SRC_DIR)/server/cache.c \
+       $(SRC_DIR)/server/config.c \
+       $(SRC_DIR)/server/ssl_engine.c \
+       $(SRC_DIR)/server/utils.c
 
 # Détection de l'OS pour adapter les dépendances, drapeaux et extensions
 ifeq ($(OS),Windows_NT)
@@ -59,7 +62,7 @@ $(TARGET): $(OBJS)
 # Inclusion des fichiers de dépendances générés automatiquement par GCC
 -include $(DEPS)
 
-# Nettoyage unifié et récursif des artefacts de compilation
+# Nettoyage unifié et récursif des artefacts de compilation (src/ et src/server/)
 clean:
 	rm -f $(SRC_DIR)/*.o $(SRC_DIR)/*.d
 	rm -f $(SRC_DIR)/server/*.o $(SRC_DIR)/server/*.d
