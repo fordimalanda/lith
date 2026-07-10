@@ -15,9 +15,9 @@
 
 /**
  * Détache le processus de la session du terminal pour en faire un démon système autonome.
- * Retourne 0 en cas de succès, -1 en cas d'erreur critique.
+ * Utilise le chemin d'exécution initial pour y ancrer son fichier de log.
  */
-int lith_daemonize(void) {
+int lith_daemonize(const char *initial_cwd) {
     pid_t pid;
 
     // 1. Premier fork : Séparation du processus parent
@@ -26,7 +26,6 @@ int lith_daemonize(void) {
         lith_log(LOG_ERROR, "Daemonization CRITICAL: First fork failed");
         return -1;
     }
-    // Si nous sommes le parent, on quitte immédiatement pour rendre la main au shell
     if (pid > 0) {
         exit(0); 
     }
@@ -44,11 +43,15 @@ int lith_daemonize(void) {
         return -1;
     }
     if (pid > 0) {
-        exit(0); // Le premier enfant meurt, le petit-enfant devient le démon final
+        exit(0); 
     }
 
     // 4. Réinitialisation du masque de fichier (umask)
     umask(0);
+
+    // Construction du chemin absolu pour le fichier de log avant le chdir
+    char log_path[512];
+    snprintf(log_path, sizeof(log_path), "%s/lith.log", initial_cwd);
 
     // 5. Changement vers le répertoire racine pour ne pas bloquer les volumes de l'OS
     if (chdir("/") < 0) {
@@ -61,20 +64,18 @@ int lith_daemonize(void) {
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
 
-    // Redirection de STDIN vers l'oubliette du système
+    // Redirection de STDIN vers /dev/null
     int dev_null = open("/dev/null", O_RDONLY);
     if (dev_null < 0) return -1;
 
-    // Redirection de STDOUT et STDERR vers lith.log
-    // O_APPEND garantit que les redémarrages successifs écrivent à la suite des logs
-    int log_fd = open("lith.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    // Redirection de STDOUT et STDERR vers le chemin absolu calculé de lith.log
+    int log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (log_fd < 0) {
-        // Fallback de sécurité si le répertoire actuel n'est pas scriptable
+        // Fallback de sécurité si l'emplacement initial n'est pas accessible en écriture
         log_fd = open("/tmp/lith.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
     }
 
     if (log_fd >= 0) {
-        // Redirection de stdout (1) et stderr (2) vers le fichier de log via duplication
         dup2(log_fd, STDOUT_FILENO);
         dup2(log_fd, STDERR_FILENO);
     }
