@@ -22,27 +22,32 @@
     typedef int socket_t;
 #endif
 
-/* API de contrôle d'infrastructure - Mode Démon Linux */
-#ifndef _WIN32
-int lith_daemonize(const char *initial_cwd); // Mises à jour pour la gestion des chemins absolus
-#endif
-
 #include <pthread.h>
 #include <stdbool.h>
-#include "common.h" // Contient ServerConfig
-#include "cache.h"  // Intégration du module de cache
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include "common.h" 
+#include "cache.h"  
 
 #define DEFAULT_PORT 8090
 #define BACKLOG 10
 #define BUFFER_SIZE 4096
 
-/* ==============================================================================
- * CONTEXTES CLIENTS
- * ============================================================================== */
+/* API de contrôle d'infrastructure - Mode Démon Linux */
+#ifndef _WIN32
+int lith_daemonize(const char *initial_cwd);
+#endif
 
+/* API d'initialisation et d'accès au moteur SSL d'OpenSSL */
+int lith_ssl_init(const ServerConfig *config);
+SSL_CTX *lith_ssl_get_context(void);
+void lith_ssl_cleanup(void);
+
+/* Structures de contexte passées aux routeurs réseau utilisant SSL */
 typedef struct {
     socket_t client_socket;
     struct sockaddr_in client_address;
+    SSL *ssl_session;
 } ClientContext;
 
 typedef struct {
@@ -50,40 +55,34 @@ typedef struct {
     char public_dir[256];
 } ExpandedClientContext;
 
-/* ==============================================================================
- * STRUCTURES DU THREAD POOL
- * ============================================================================== */
-
+/* Structures de synchronisation et de gestion de la file d'attente (Thread Pool) */
 typedef struct Node {
     socket_t socket;
     struct Node *next;
 } Node_t;
 
 typedef struct {
-    Node_t *head;           // Premier élément de la file (extraction)
-    Node_t *tail;           // Dernier élément de la file (insertion)
-    int size;               // Nombre actuel de connexions en attente
-    pthread_mutex_t mutex;  // Mutex de protection de la file
-    pthread_cond_t cond;    // Variable de condition pour réveiller les workers
-    bool shutdown;          // Drapeau d'arrêt global du serveur
-    char public_dir[256];   // Copie locale du répertoire public pour les workers
-    LithCache ram_cache;    // Le cache rejoint le contexte des workers
+    Node_t *head;           
+    Node_t *tail;           
+    int size;               
+    pthread_mutex_t mutex;  
+    pthread_cond_t cond;    
+    bool shutdown;          
+    char public_dir[256];   
+    LithCache ram_cache;    
 } ThreadPool_t;
-
-/* ==============================================================================
- * PROTOTYPES ET CYCLE DE VIE
- * ============================================================================== */
 
 /* Cycle de vie du serveur réseau */
 int lith_init_server(const ServerConfig *config);
 void lith_start_server(int server_fd, const ServerConfig *config);
 
-/* Cœur du worker et traitement du protocole HTTP */
+/* Cœur d'exécution asynchrone des Workers */
 void *lith_client_handler(void *arg);
 
 /* API de contrôle du Thread Pool */
 void thread_pool_init(ThreadPool_t *pool, int num_threads, const char *public_dir);
 void thread_pool_push(ThreadPool_t *pool, socket_t socket);
+socket_t thread_pool_pop(ThreadPool_t *pool);
 void thread_pool_shutdown(ThreadPool_t *pool);
 
 #endif // SERVER_H
