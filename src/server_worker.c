@@ -14,7 +14,6 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-// [vx.x.x] Gestion Multi-plateforme des Sockets et Timeouts SSL (Unix vs Windows)
 #ifdef _WIN32
     #include <winsock2.h>
     #define SET_TIMEOUT_ERROR (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms)) < 0)
@@ -24,9 +23,6 @@
     #define SET_TIMEOUT_ERROR (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout_tv, sizeof(timeout_tv)) < 0)
 #endif
 
-/**
- * Initialise le pool de workers et pré-charge le cache statique RAM
- */
 void thread_pool_init(ThreadPool_t *pool, int num_threads, const char *public_dir) {
     pool->head = NULL;
     pool->tail = NULL;
@@ -58,9 +54,6 @@ void thread_pool_init(ThreadPool_t *pool, int num_threads, const char *public_di
     lith_log(LOG_INFO, "Thread pool initialized successfully with %d active workers.", num_threads);
 }
 
-/**
- * Ajoute une connexion entrante dans la file d'attente FIFO (Thread-Safe)
- */
 void thread_pool_push(ThreadPool_t *pool, socket_t socket) {
     Node_t *new_node = malloc(sizeof(Node_t));
     if (!new_node) {
@@ -93,9 +86,6 @@ void thread_pool_push(ThreadPool_t *pool, socket_t socket) {
     pthread_mutex_unlock(&pool->mutex);
 }
 
-/**
- * Extrait une connexion de la file FIFO (Thread-Safe & Bloquant)
- */
 socket_t thread_pool_pop(ThreadPool_t *pool) {
     pthread_mutex_lock(&pool->mutex);
 
@@ -122,9 +112,6 @@ socket_t thread_pool_pop(ThreadPool_t *pool) {
     return client_socket;
 }
 
-/**
- * Arrête proprement le pool de threads et détruit les verrous
- */
 void thread_pool_shutdown(ThreadPool_t *pool) {
     pthread_mutex_lock(&pool->mutex);
     pool->shutdown = true;
@@ -137,9 +124,6 @@ void thread_pool_shutdown(ThreadPool_t *pool) {
     lith_cache_destroy(&pool->ram_cache);
 }
 
-/**
- * Fonction de démarrage des threads du pool (Consommateurs FIFO TLS/HTTPS)
- */
 void *lith_client_handler(void *arg) {
     ThreadPool_t *pool = (ThreadPool_t *)arg;
     SSL_CTX *ssl_ctx = lith_ssl_get_context();
@@ -151,7 +135,6 @@ void *lith_client_handler(void *arg) {
             break;
         }
 
-        // Abstraction du Timeout (3000ms) avant Handshake cryptographique
 #ifdef _WIN32
         int timeout_ms = 3000;
 #else
@@ -164,10 +147,8 @@ void *lith_client_handler(void *arg) {
             lith_log(LOG_ERROR, "Failed to apply SO_RCVTIMEO context on client socket.");
         }
 
-        // 1. Initialisation de la session sécurisée OpenSSL
         SSL *ssl = SSL_new(ssl_ctx);
         if (!ssl) {
-            // Coquille corrigée ici : lith_log à la place de compress_log
             lith_log(LOG_ERROR, "SSL: Failed to allocate space for client session storage.");
             lith_close_socket(client_socket);
             continue;
@@ -175,7 +156,6 @@ void *lith_client_handler(void *arg) {
 
         SSL_set_fd(ssl, client_socket);
 
-        // 2. Exécution de la poignée de main TLS (Handshake)
         if (SSL_accept(ssl) <= 0) {
             lith_log(LOG_WARN, "SSL: Cryptographic handshake failed. Dropping insecure connection request.");
             SSL_free(ssl);
@@ -183,7 +163,6 @@ void *lith_client_handler(void *arg) {
             continue;
         }
 
-        // 3. Remplissage des contextes requis par l'infrastructure
         ExpandedClientContext ectx;
         ectx.base_ctx.client_socket = client_socket;
         ectx.base_ctx.ssl_session = ssl;
@@ -196,9 +175,7 @@ void *lith_client_handler(void *arg) {
             char buffer[BUFFER_SIZE];
             bool keep_running = true;
 
-            // 4. Boucle persistante Keep-Alive sur couche TLS (SSL_read)
             while (keep_running) {
-                // Remise à zéro complète du tampon à chaque itération Keep-Alive
                 memset(buffer, 0, sizeof(buffer));
                 int received = SSL_read(ssl, buffer, sizeof(buffer) - 1);
                 
@@ -207,20 +184,17 @@ void *lith_client_handler(void *arg) {
                     
                     if (parse_http_request(buffer, req) == 0) {
                         
-                        // [vx.x.x] Accumulation stricte du Body pour les requêtes volumineuses (POST)
                         if (req->method == METHOD_POST && req->content_length > 0) {
                             long body_received = 0;
                             
                             if (req->body_start) {
-                                // Calcul de la taille du fragment initial du body capturé au premier read
                                 body_received = received - (req->body_start - buffer);
                             }
                             
-                            // Tant qu'il manque des octets par rapport au Content-Length attendu
                             while (body_received < req->content_length && received < (BUFFER_SIZE - 1)) {
                                 int chunk = SSL_read(ssl, buffer + received, sizeof(buffer) - 1 - received);
                                 if (chunk <= 0) {
-                                    break; // Rupture de flux ou timeout
+                                    break; 
                                 }
                                 received += chunk;
                                 buffer[received] = '\0';
@@ -228,53 +202,27 @@ void *lith_client_handler(void *arg) {
                             }
                         }
 
-                        // Routage avec l'assurance d'avoir collecté l'intégralité de la charge utile
                         handle_http_route(&ectx, req, buffer, received);
                         
                         if (!req->keep_alive) {
                             keep_running = false;
                         }
                     } else {
-                        send_ssl_http_error(ssl, 400, "Bad Request", "Malformed HTTP request protocol.", false);
+                        // Utilisation de la fonction unifiée du routeur
+                        send_http_error(ssl, 400, "Bad Request", "Malformed HTTP request protocol.", false);
                         keep_running = false;
                     }
                 } else {
-                    // Fin de flux ou Timeout d'inactivité atteint
                     keep_running = false;
                 }
             }
             free(req);
         }
 
-        // 5. Libération et découplage de la session TLS
         SSL_shutdown(ssl);
         SSL_free(ssl);
         lith_close_socket(client_socket);
     }
 
     return NULL;
-}
-
-/**
- * Envoie une réponse d'erreur HTTP structurée à travers le tunnel chiffré SSL
- */
-void send_ssl_http_error(SSL *ssl, int status_code, const char *status_text, const char *description, bool keep_alive) {
-    char body[512];
-    char header[512];
-    
-    snprintf(body, sizeof(body),
-             "<html><head><title>%d %s</title></head>"
-             "<body bgcolor=\"#121212\" text=\"#ffffff\"><center><h1>LITH Engine: %d %s</h1><p>%s</p><hr><i>v%s</i></center></body></html>",
-             status_code, status_text, status_code, status_text, description, LITH_VERSION);
-
-    snprintf(header, sizeof(header),
-             "HTTP/1.1 %d %s\r\n"
-             "Server: LITH/%s\r\n"
-             "Content-Type: text/html; charset=UTF-8\r\n"
-             "Content-Length: %zu\r\n"
-             "Connection: %s\r\n\r\n",
-             status_code, status_text, LITH_VERSION, strlen(body), keep_alive ? "keep-alive" : "close");
-
-    SSL_write(ssl, header, (int)strlen(header));
-    SSL_write(ssl, body, (int)strlen(body));
 }
