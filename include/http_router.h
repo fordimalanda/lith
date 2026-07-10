@@ -3,8 +3,10 @@
 
 #include "server.h"
 #include "http_parser.h"
+#include <openssl/ssl.h>
 
 void handle_http_route(ExpandedClientContext *ectx, HttpRequest *req, char *full_buffer, int total_received);
 void send_http_error(socket_t client_socket, int status_code, const char *status_text, const char *description, bool keep_alive);
+void send_ssl_http_error(SSL *ssl, int status_code, const char *status_text, const char *description, bool keep_alive);
 
 #endif // HTTP_ROUTER_H

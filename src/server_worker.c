@@ -167,7 +167,7 @@ void *lith_client_handler(void *arg) {
         // 1. Initialisation de la session sécurisée OpenSSL
         SSL *ssl = SSL_new(ssl_ctx);
         if (!ssl) {
-            lith_log(LOG_ERROR, "SSL: Failed to allocate space for client session storage.");
+            compress_log(LOG_ERROR, "SSL: Failed to allocate space for client session storage.");
             lith_close_socket(client_socket);
             continue;
         }
@@ -234,7 +234,8 @@ void *lith_client_handler(void *arg) {
                             keep_running = false;
                         }
                     } else {
-                        send_http_error(ssl, 400, "Bad Request", "Malformed HTTP request protocol.", false);
+                        // Option 1 sélectionnée : Transmission chiffrée de l'erreur 400
+                        send_ssl_http_error(ssl, 400, "Bad Request", "Malformed HTTP request protocol.", false);
                         keep_running = false;
                     }
                 } else {
@@ -252,4 +253,28 @@ void *lith_client_handler(void *arg) {
     }
 
     return NULL;
+}
+
+/**
+ * Envoie une réponse d'erreur HTTP structurée à travers le tunnel chiffré SSL
+ */
+void send_ssl_http_error(SSL *ssl, int status_code, const char *status_text, const char *description, bool keep_alive) {
+    char body[512];
+    char header[512];
+    
+    snprintf(body, sizeof(body),
+             "<html><head><title>%d %s</title></head>"
+             "<body bgcolor=\"#121212\" text=\"#ffffff\"><center><h1>LITH Engine: %d %s</h1><p>%s</p><hr><i>v%s</i></center></body></html>",
+             status_code, status_text, status_code, status_text, description, LITH_VERSION);
+
+    snprintf(header, sizeof(header),
+             "HTTP/1.1 %d %s\r\n"
+             "Server: LITH/%s\r\n"
+             "Content-Type: text/html; charset=UTF-8\r\n"
+             "Content-Length: %zu\r\n"
+             "Connection: %s\r\n\r\n",
+             status_code, status_text, LITH_VERSION, strlen(body), keep_alive ? "keep-alive" : "close");
+
+    SSL_write(ssl, header, (int)strlen(header));
+    SSL_write(ssl, body, (int)strlen(body));
 }
