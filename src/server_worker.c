@@ -167,7 +167,8 @@ void *lith_client_handler(void *arg) {
         // 1. Initialisation de la session sécurisée OpenSSL
         SSL *ssl = SSL_new(ssl_ctx);
         if (!ssl) {
-            compress_log(LOG_ERROR, "SSL: Failed to allocate space for client session storage.");
+            // Coquille corrigée ici : lith_log à la place de compress_log
+            lith_log(LOG_ERROR, "SSL: Failed to allocate space for client session storage.");
             lith_close_socket(client_socket);
             continue;
         }
@@ -234,7 +235,6 @@ void *lith_client_handler(void *arg) {
                             keep_running = false;
                         }
                     } else {
-                        // Option 1 sélectionnée : Transmission chiffrée de l'erreur 400
                         send_ssl_http_error(ssl, 400, "Bad Request", "Malformed HTTP request protocol.", false);
                         keep_running = false;
                     }

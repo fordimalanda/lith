@@ -78,9 +78,9 @@ int main(int argc, char *argv[]) {
     }
 
     if (strcmp(argv[1], "start") == 0) {
-        // 1. Sauvegarde du répertoire de travail initial avant isolation
-        char initial_cwd[512] = {0};
+        // 1. Isolation conditionnelle de la variable pour supprimer le warning Windows
 #ifndef _WIN32
+        char initial_cwd[512] = {0};
         if (getcwd(initial_cwd, sizeof(initial_cwd)) == NULL) {
             lith_log(LOG_ERROR, "Failed to get current working directory");
             return 1;
