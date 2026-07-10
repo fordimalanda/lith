@@ -9,11 +9,11 @@ INCLUDES = -Iinclude
 TARGET_DIR = bin
 SRC_DIR = src
 
-# Liste de base des fichiers sources (communs aux deux plateformes)
+# Liste de base des fichiers sources (Mise à jour du chemin de cache.c)
 SRCS = $(SRC_DIR)/main.c \
        $(SRC_DIR)/server_worker.c \
        $(SRC_DIR)/http_parser.c \
-       $(SRC_DIR)/cache.c \
+       $(SRC_DIR)/server/cache.c \
        $(SRC_DIR)/logger.c \
        $(SRC_DIR)/http_router.c \
        $(SRC_DIR)/server_utils.c
@@ -53,14 +53,17 @@ $(TARGET): $(OBJS)
 
 # Règle générique pour la compilation des fichiers objets (.c -> .o)
 %.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Inclusion des fichiers de dépendances générés automatiquement par GCC
 -include $(DEPS)
 
-# Nettoyage unifié des artefacts de compilation
+# Nettoyage unifié et récursif des artefacts de compilation
 clean:
-	rm -f $(SRC_DIR)/*.o $(SRC_DIR)/*.d $(TARGET)
+	rm -f $(SRC_DIR)/*.o $(SRC_DIR)/*.d
+	rm -f $(SRC_DIR)/server/*.o $(SRC_DIR)/server/*.d
+	rm -f $(TARGET)
 	@echo "[+] Project cleanup completed."
 
 .PHONY: all clean
