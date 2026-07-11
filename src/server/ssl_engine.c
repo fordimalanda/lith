@@ -25,12 +25,12 @@ int lith_ssl_init(const ServerConfig *config) {
         return -1;
     }
 
-    // Détermination sécurisée des chemins (fallback si les chaînes de config sont vides)
-    const char *cert_path = (config->ssl_cert_path && strlen(config->ssl_cert_path) > 0) 
+    // Détermination sécurisée des chemins (Seul strlen compte pour un tableau statique)
+    const char *cert_path = (strlen(config->ssl_cert_path) > 0) 
                             ? config->ssl_cert_path 
                             : "certs/server.crt";
 
-    const char *key_path = (config->ssl_key_path && strlen(config->ssl_key_path) > 0) 
+    const char *key_path = (strlen(config->ssl_key_path) > 0) 
                            ? config->ssl_key_path 
                            : "certs/server.key";
 
