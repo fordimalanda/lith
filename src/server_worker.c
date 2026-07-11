@@ -147,6 +147,38 @@ void *lith_client_handler(void *arg) {
             lith_log(LOG_ERROR, "Failed to apply SO_RCVTIMEO context on client socket.");
         }
 
+        // 🔍 SNIFFING DE PROTOCOLE : Inspection du premier octet avec MSG_PEEK
+        char peek_buf[1] = {0};
+        // Sous Windows/Linux, recv s'utilise de la même manière pour MSG_PEEK
+        int peek_res = recv(client_socket, peek_buf, 1, MSG_PEEK);
+
+        if (peek_res <= 0) {
+            lith_log(LOG_WARN, "Network: Empty or premature request dropped.");
+            lith_close_socket(client_socket);
+            continue;
+        }
+
+        // Si le premier octet n'est pas 0x16 (TLS Handshake), c'est du HTTP clair !
+        if (peek_buf[0] != 0x16) {
+            lith_log(LOG_INFO, "HTTP: Cleartext protocol signature found. Enforcing 301 upgrade redirect.");
+
+            char redirect_response[512];
+            snprintf(redirect_response, sizeof(redirect_response),
+                "HTTP/1.1 301 Moved Permanently\r\n"
+                "Server: LITH/%s\r\n"
+                "Location: https://localhost:8090/\r\n"
+                "Content-Length: 0\r\n"
+                "Connection: close\r\n\r\n",
+                LITH_VERSION
+            );
+
+            // Envoi de la réponse brute sur la socket système
+            send(client_socket, redirect_response, (int)strlen(redirect_response), 0);
+            lith_close_socket(client_socket);
+            continue;
+        }
+
+        // --- TRAITEMENT HTTPS STANDARD ---
         SSL *ssl = SSL_new(ssl_ctx);
         if (!ssl) {
             lith_log(LOG_ERROR, "SSL: Failed to allocate space for client session storage.");
@@ -208,7 +240,6 @@ void *lith_client_handler(void *arg) {
                             keep_running = false;
                         }
                     } else {
-                        // Utilisation de la fonction unifiée du routeur
                         send_http_error(ssl, 400, "Bad Request", "Malformed HTTP request protocol.", false);
                         keep_running = false;
                     }
