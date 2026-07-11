@@ -7,6 +7,7 @@
 #include <openssl/err.h>
 #include "logger.h"
 #include "common.h"
+#include <string.h>
 
 static SSL_CTX *global_ssl_ctx = NULL;
 
@@ -24,16 +25,25 @@ int lith_ssl_init(const ServerConfig *config) {
         return -1;
     }
 
+    // Détermination sécurisée des chemins (fallback si les chaînes de config sont vides)
+    const char *cert_path = (config->ssl_cert_path && strlen(config->ssl_cert_path) > 0) 
+                            ? config->ssl_cert_path 
+                            : "certs/server.crt";
+
+    const char *key_path = (config->ssl_key_path && strlen(config->ssl_key_path) > 0) 
+                           ? config->ssl_key_path 
+                           : "certs/server.key";
+
     // Chargement du certificat public (.crt / .pem)
-    if (SSL_CTX_use_certificate_file(global_ssl_ctx, config->ssl_cert_path, SSL_FILETYPE_PEM) <= 0) {
-        lith_log(LOG_ERROR, "SSL: Failed to load cryptographic certificate target: %s", config->ssl_cert_path);
+    if (SSL_CTX_use_certificate_file(global_ssl_ctx, cert_path, SSL_FILETYPE_PEM) <= 0) {
+        lith_log(LOG_ERROR, "SSL: Failed to load cryptographic certificate target: '%s'", cert_path);
         ERR_print_errors_fp(stderr);
         return -1;
     }
 
     // Chargement de la clé privée (.key)
-    if (SSL_CTX_use_PrivateKey_file(global_ssl_ctx, config->ssl_key_path, SSL_FILETYPE_PEM) <= 0) {
-        lith_log(LOG_ERROR, "SSL: Failed to load cryptographic private key target: %s", config->ssl_key_path);
+    if (SSL_CTX_use_PrivateKey_file(global_ssl_ctx, key_path, SSL_FILETYPE_PEM) <= 0) {
+        lith_log(LOG_ERROR, "SSL: Failed to load cryptographic private key target: '%s'", key_path);
         ERR_print_errors_fp(stderr);
         return -1;
     }
