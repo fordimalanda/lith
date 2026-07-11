@@ -149,7 +149,6 @@ void *lith_client_handler(void *arg) {
 
         // 🔍 SNIFFING DE PROTOCOLE : Inspection du premier octet avec MSG_PEEK
         char peek_buf[1] = {0};
-        // Sous Windows/Linux, recv s'utilise de la même manière pour MSG_PEEK
         int peek_res = recv(client_socket, peek_buf, 1, MSG_PEEK);
 
         if (peek_res <= 0) {
@@ -160,6 +159,7 @@ void *lith_client_handler(void *arg) {
 
         // Si le premier octet n'est pas 0x16 (TLS Handshake), c'est du HTTP clair !
         if (peek_buf[0] != 0x16) {
+            // --- TRAITEMENT CLAIR (HTTP -> REDIRECTION AUTOMATIQUE 301 avec Graceful Shutdown) ---
             lith_log(LOG_INFO, "HTTP: Cleartext protocol signature found. Enforcing 301 upgrade redirect.");
 
             char redirect_response[512];
@@ -172,8 +172,23 @@ void *lith_client_handler(void *arg) {
                 LITH_VERSION
             );
 
-            // Envoi de la réponse brute sur la socket système
+            // 1. Envoi de la réponse de redirection
             send(client_socket, redirect_response, (int)strlen(redirect_response), 0);
+
+            // 2. 🌟 GRACEFUL CLOSE : On prévient qu'on n'enverra plus rien (FIN)
+            #ifdef _WIN32
+            shutdown(client_socket, SD_SEND); 
+            #else
+            shutdown(client_socket, SHUT_WR);
+            #endif
+
+            // 3. Vidange : Consommer les octets restants envoyés par le navigateur pour éviter le RST
+            char discard_buf[256];
+            while (recv(client_socket, discard_buf, sizeof(discard_buf), 0) > 0) {
+                // On boucle tant que le client transmet ses en-têtes
+            }
+
+            // 4. Fermeture propre de la socket
             lith_close_socket(client_socket);
             continue;
         }
