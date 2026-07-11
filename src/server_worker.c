@@ -159,36 +159,66 @@ void *lith_client_handler(void *arg) {
 
         // Si le premier octet n'est pas 0x16 (TLS Handshake), c'est du HTTP clair !
         if (peek_buf[0] != 0x16) {
-            // --- TRAITEMENT CLAIR (HTTP -> REDIRECTION AUTOMATIQUE 301 avec Graceful Shutdown) ---
-            lith_log(LOG_INFO, "HTTP: Cleartext protocol signature found. Enforcing 301 upgrade redirect.");
+            lith_log(LOG_INFO, "HTTP: Cleartext protocol signature found. Enforcing dynamic 301 redirect.");
 
-            char redirect_response[512];
+            // Pour une redirection dynamique, on lit une petite partie de la requête sans la consommer entièrement
+            char peek_req[1024] = {0};
+            int req_len = recv(client_socket, peek_req, sizeof(peek_req) - 1, MSG_PEEK);
+            
+            char target_path[256] = "/";
+            char host_header[256] = "localhost:8090";
+
+            if (req_len > 0) {
+                // Extraction basique du chemin (ex: GET /dashboard.html HTTP/1.1)
+                char *path_start = strchr(peek_req, ' ');
+                if (path_start) {
+                    path_start++;
+                    char *path_end = strchr(path_start, ' ');
+                    if (path_end && (path_end - path_start < (int)sizeof(target_path))) {
+                        size_t len = path_end - path_start;
+                        strncpy(target_path, path_start, len);
+                        target_path[len] = '\0';
+                    }
+                }
+
+                // Extraction basique du Host: pour gérer les alias d'IP ou de domaine
+                char *host_start = strstr(peek_req, "Host: ");
+                if (host_start) {
+                    host_start += 6;
+                    char *host_end = strchr(host_start, '\r');
+                    if (!host_end) host_end = strchr(host_start, '\n');
+                    if (host_end && (host_end - host_start < (int)sizeof(host_header))) {
+                        size_t len = host_end - host_start;
+                        strncpy(host_header, host_start, len);
+                        host_header[len] = '\0';
+                    }
+                }
+            }
+
+            char redirect_response[1024];
             snprintf(redirect_response, sizeof(redirect_response),
                 "HTTP/1.1 301 Moved Permanently\r\n"
                 "Server: LITH/%s\r\n"
-                "Location: https://localhost:8090/\r\n"
+                "Location: https://%s%s\r\n"
                 "Content-Length: 0\r\n"
                 "Connection: close\r\n\r\n",
-                LITH_VERSION
+                LITH_VERSION, host_header, target_path
             );
 
-            // 1. Envoi de la réponse de redirection
+            // 1. Envoi de la réponse de redirection construite dynamiquement
             send(client_socket, redirect_response, (int)strlen(redirect_response), 0);
 
-            // 2. 🌟 GRACEFUL CLOSE : On prévient qu'on n'enverra plus rien (FIN)
+            // 2. GRACEFUL CLOSE
             #ifdef _WIN32
             shutdown(client_socket, SD_SEND); 
             #else
             shutdown(client_socket, SHUT_WR);
             #endif
 
-            // 3. Vidange : Consommer les octets restants envoyés par le navigateur pour éviter le RST
+            // 3. Vidange complète du canal
             char discard_buf[256];
-            while (recv(client_socket, discard_buf, sizeof(discard_buf), 0) > 0) {
-                // On boucle tant que le client transmet ses en-têtes
-            }
+            while (recv(client_socket, discard_buf, sizeof(discard_buf), 0) > 0) {}
 
-            // 4. Fermeture propre de la socket
             lith_close_socket(client_socket);
             continue;
         }

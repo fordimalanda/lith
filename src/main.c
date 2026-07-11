@@ -33,8 +33,6 @@ void handle_sigint(int sig) {
     }
     
     thread_pool_shutdown(&global_pool);
-    
-    // Libération du contexte et des structures OpenSSL
     lith_ssl_cleanup();
 
 #ifdef _WIN32
@@ -63,7 +61,11 @@ void display_usage() {
 }
 
 int main(int argc, char *argv[]) {
+    // Interception des signaux d'arrêt (Ctrl+C en console et SIGTERM en mode Démon)
     signal(SIGINT, handle_sigint);
+#ifndef _WIN32
+    signal(SIGTERM, handle_sigint);
+#endif
 
     if (argc < 2) {
         display_usage();
@@ -81,7 +83,6 @@ int main(int argc, char *argv[]) {
     }
 
     if (strcmp(argv[1], "start") == 0) {
-        // 1. Isolation conditionnelle de la variable pour supprimer le warning Windows
 #ifndef _WIN32
         char initial_cwd[512] = {0};
         if (getcwd(initial_cwd, sizeof(initial_cwd)) == NULL) {
@@ -90,7 +91,6 @@ int main(int argc, char *argv[]) {
         }
 #endif
 
-        // 2. Lecture impérative de la configuration
         load_config("lith.conf", &global_config);
 
         int port_override = 0;
@@ -138,13 +138,11 @@ int main(int argc, char *argv[]) {
         printf("   Status: Initializing Architecture...\n");
         printf("----------------------------------------\n");
 
-        // 3. INITIALISATION DU MOTEUR CRYPTOGRAPHIQUE SSL
         if (lith_ssl_init(&global_config) < 0) {
             lith_log(LOG_ERROR, "Critical: Failed to bootstrap OpenSSL context engine. Aborting launch.");
             return 1;
         }
 
-        // 4. Initialisation des workers et du socket d'écoute
         thread_pool_init(&global_pool, 8, global_config.public_dir);
 
         int server_fd = lith_init_server(&global_config);
